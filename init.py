@@ -1,5 +1,8 @@
 # init.py
 # -------
+import importlib
+
+
 from mysqlsh.plugin_manager import plugin, plugin_function
 
 @plugin
@@ -29,6 +32,7 @@ def hello_world():
         Nothing
     """
     print("Hello world!")
+    print("Just joking!")
 
 @plugin_function("magicbox.showSchemas")
 def show_schemas(session=None):
@@ -57,9 +61,12 @@ def show_schemas(session=None):
         shell.dump_rows(r)
 
 from magicbox.proxysqlpkg import proxysql
+from magicbox.pxcpkg  import pxcprocessor 
+
+importlib.reload(pxcprocessor)
 
 @plugin_function("magicbox.createProxysql")
-def create(uri):
+def createProxy(uri):
     """
     Create the ProxySQL Object.
 
@@ -81,3 +88,16 @@ def create(uri):
          'importUsers': lambda hostgroup="", user_search="": my_proxy.import_users(hostgroup, user_search),
          'setUserHostgroup': lambda hostgroup="", user_search="": my_proxy.set_host_group(hostgroup, user_search)
     }
+@plugin_function("magicbox.createPXCProcessor")
+def createPXCprocessor(uri):
+    """
+    Create the PXCProcessor Object.
+
+    Args:
+        uri (string): Connection uri to any PXC node part of the cluster.
+
+    Returns:
+        The newly created PXC Processor object
+    """
+    my_pxcproc = pxcprocessor.PxcProcessor(uri)
+    # print(my_pxcproc)

@@ -1,8 +1,11 @@
 import mysqlsh
 import time
 import sys
+import dataclasses
 from mysqlsh import mysql
 shell = mysqlsh.globals.shell
+
+# import mysqlpkg.mysql_obj as mysql_obj
 
 class ProxySQL:
     """
@@ -59,19 +62,19 @@ class ProxySQL:
 
         return "%d tb" % (size,)
 
-    def __return_gr_members(self,session):
-        stmt = """select member_host, member_port from performance_schema.replication_group_members"""
-        result = session.run_sql(stmt)
-        members = []
-        members_rec = result.fetch_all()
-        if len(members_rec) > 0:
-            for member in members_rec:
-                instance = {}
-                instance['host'] = member[0]
-                instance['port'] = member[1]
-                members.append(instance)
-            return members
-        return None
+    # def __return_gr_members(self,session):
+    #     stmt = """select member_host, member_port from performance_schema.replication_group_members"""
+    #     result = session.run_sql(stmt)
+    #     members = []
+    #     members_rec = result.fetch_all()
+    #     if len(members_rec) > 0:
+    #         for member in members_rec:
+    #             instance = {}
+    #             instance['host'] = member[0]
+    #             instance['port'] = member[1]
+    #             members.append(instance)
+    #         return members
+    #     return None
 
     def __return_mysql_users(self,session,search):
         stmt = """select User, authentication_string from mysql.user where user like '%s'
@@ -91,15 +94,16 @@ class ProxySQL:
         return None
 
     def __return_hosts(self):
-        stmt = """select hostname, port from mysql_servers"""
+        stmt = """select hostgroup_id,hostname, port from mysql_servers"""
         result = self.session.run_sql(stmt)
         hosts = []
         hosts_rec = result.fetch_all()
         if len(hosts_rec) > 0:
             for host in hosts_rec:
                 instance = {}
-                instance['host'] = host[0]
-                instance['port'] = host[1]
+                instance['hostgroupId'] = host[0]
+                instance['host'] = host[1]
+                instance['port'] = host[2]
                 hosts.append(instance)
             return hosts
         return None
@@ -286,6 +290,8 @@ class ProxySQL:
 
 
     def get_user_hostgroup(self, hostgroup=False):
+        # mysql = mysql_obj.MySQLNode()
+        
         if not hostgroup:
             stmt = """select username, password, default_hostgroup from mysql_users"""
         else:
