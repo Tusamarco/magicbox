@@ -1,6 +1,7 @@
 """_summary_
     Set of functionalities that allow to connect to a data base 
     Also some most commonly used operations
+    test
 """
 
 import mysqlsh
