@@ -1,6 +1,7 @@
 # init.py
 # -------
 import importlib
+import mysqlsh
 
 
 from mysqlsh.plugin_manager import plugin, plugin_function
@@ -8,9 +9,9 @@ from mysqlsh.plugin_manager import plugin, plugin_function
 @plugin
 class magicbox:
     """
-    A magicbox plugin that showcases the shell's plugin feature.
+    The magicbox plugin 
 
-    This plugin is used only for magicbox purpose.
+    The magicbox plugin is going to bring you joy and candies
     """
 
 import debugpy
@@ -19,7 +20,7 @@ print("Waiting for debugger attach...")
 debugpy.wait_for_client()
 print("Debugger attached.")
 
-import mysqlsh
+
 
 @plugin_function("magicbox.helloWorld")
 def hello_world():
@@ -88,6 +89,8 @@ def createProxy(uri):
          'importUsers': lambda hostgroup="", user_search="": my_proxy.import_users(hostgroup, user_search),
          'setUserHostgroup': lambda hostgroup="", user_search="": my_proxy.set_host_group(hostgroup, user_search)
     }
+    
+    
 @plugin_function("magicbox.createPXCProcessor")
 def createPXCprocessor(uri):
     """
@@ -99,5 +102,6 @@ def createPXCprocessor(uri):
     Returns:
         The newly created PXC Processor object
     """
-    my_pxcproc = pxcprocessor.PxcProcessor(uri)
+    my_pxcproc = pxcprocessor.Pxc_processor(uri)
+    
     # print(my_pxcproc)

@@ -1,16 +1,28 @@
 # object module defining all mysql related class
-import mysqlsh
+#import mysqlsh
 import time
 import sys
 import importlib
 
 from typing import Dict
-from mysqlsh import mysql
-shell = mysqlsh.globals.shell
+#from mysqlsh import mysql
+#shell = mysqlsh.globals.shell
 
 from typing import Dict
 
 class Mysql_Node:
+    """
+    Mysql_Node class
+    
+    Mysql_Node class, represent a MySQL node and it implements the methods to manage it
+    
+    Args: 
+        requires a valid URI to connect to the MySQL node
+        Valid URI form: <user>:[<password>]@<ip>:[<port>]
+    
+    Returns: One MySQL Node initialized 
+
+    """
     def __init__(self,uri=False):
         self.user = None
         self.ip = None
@@ -19,31 +31,35 @@ class Mysql_Node:
         self.use_ssl = 0
         self.uri = uri
         self.session = None
+        self.processed    = False
+        self.read_only     = False
+        self.status:Dict[str,str]
+        self.variables:Dict[str,str]
         
         # Comment           string
         # Compression       int
         # Connection        *sql.DB
-        self.conn_used     = 0
-        self.dns          = str
+        # self.conn_used     = 0
+        # self.dns:str       = ""
         # self.HostgroupId  = 0
         self.hostgroups   = [] #Hostgroup
-        self.ip           = str
+        # self.ip:str           = ""
         # MaxConnection     int
         # MaxLatency        int
         # MaxReplicationLag int
         # Name              string
         # NodeTCPDown       bool
         # Password          string
-        self.port         = 0
-        self.processed    = False
+        # self.port         = 0
+        # self.processed    = False
         # ProcessStatus     int
         # ProxyStatus       string
-        self.read_only     = False
+        # self.read_only     = False
         # Ssl               *SslCertificates
-        self.status       = Dict[str,str]
+        # self.status       = Dict[str,str]
         # UseSsl            bool
         # User              string
-        self.variables    = Dict[str,str]
+        # self.variables    = Dict[str,str]
         # Weight            int
         # PingTimeout       int
 
@@ -86,24 +102,4 @@ class Mysql_Node:
                 sys.tracebacklimit = 0
                 raise Exception("Not possible to connect to data Node!")
 
-            
-        
-        # self.user = shell.parse_uri(self.uri)['user']
-        # self.ip = shell.parse_uri(self.uri)['host']
-        # self.port = shell.parse_uri(self.uri)['port']
-        # if not "password" in shell.parse_uri(self.uri):
-        #     self.__password = shell.prompt('Password: ',{'type': 'password'})
-        # else:
-        #     self.__password = shell.parse_uri(self.uri)['password']
-        # try:
-        #     self.session = mysql.get_session("%s:%s@%s:%s?ssl-mode=PREFERRED" % (self.user, self.__password, self.ip, self.port))
-        #     stmt = "select version()"
-        #     result = self.session.run_sql(stmt)
-        #     self.version = result.fetch_one()[0]
-        #     print("Connected to data node (%s)" % self.version)
-        # except:
-        #     sys.tracebacklimit = 0
-        #     raise Exception("Not possible to connect to data Node!")
-
-        
-    
+  
