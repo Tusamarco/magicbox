@@ -5,7 +5,7 @@
 #import mysqlsh
 from typing import Dict
 #from mysqlsh import mysql
-from magicbox.pxcpkg.pxcprocessor import PXC_Node 
+from magicbox.pxcpkg.pxc_obj import PXC_Node 
 from magicbox.pxcpkg.pxcprocessor import Pxc_processor
 
 

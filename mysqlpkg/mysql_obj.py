@@ -8,8 +8,6 @@ from typing import Dict
 #from mysqlsh import mysql
 #shell = mysqlsh.globals.shell
 
-from typing import Dict
-
 class Mysql_Node:
     """
     Mysql_Node class
@@ -86,17 +84,27 @@ class Mysql_Node:
 
         
         import common.dbtools as dbtools
+        
         importlib.reload(dbtools)
         
-        self.session = dbtools.get_mysql_classic_connection(uri)
+        my_connection =  dbtools.get_mysql_classic_connection(uri)
+        # self.session = dbtools.get_mysql_classic_connection(uri)
+        self.session = my_connection.connection_my
+        self.ip =  my_connection.ip_my
+        self.port =  my_connection.port_my
+        
         if self.session is not None:
             try:
                 self.variables = dbtools.get_variables(self.session,"")
                 self.status = dbtools.get_status(self.session,"")                
 
                 print("Connected to data node %s (%s - %s) " % (self.variables["hostname"],self.variables["version"],self.variables["version_comment"]))
-                close_conn = dbtools.close_mysql_python_connection(self.session)
-                # print(close_conn)
+                '''
+                 TODO
+                 to find a common way to close the connection to the db at the end of the operation
+                '''
+                # close_conn = dbtools.close_mysql_python_connection(self.session)
+                
                 
             except:
                 sys.tracebacklimit = 0

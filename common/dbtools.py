@@ -11,8 +11,14 @@ except:
     pass
 
 import time
+from  dataclasses import dataclass
 from common import utils_mb
 
+@dataclass
+class Mysql_connection:
+        connection_my:None = None
+        ip_my:str = ""
+        port_my:int = 0
 
 
 import mysql.connector as mysql_connector 
@@ -78,7 +84,10 @@ def get_mysql_classic_connection(uri):
         Exception: connection 
 
     Returns:
-        connection: return a connection from connector object as for (https://dev.mysql.com/doc/connector-python/en/connector-python-api-mysql-connector.html)
+        mysql_connection object;
+            connection: return a connection from connector object as for (https://dev.mysql.com/doc/connector-python/en/connector-python-api-mysql-connector.html)
+            ip: string with the information about the ip
+            port: port
     """
     user = None
     ip = None
@@ -119,7 +128,9 @@ def get_mysql_classic_connection(uri):
         connection = mysql_connector.connect(**config)
 
         # mysql.get_classic_session("%s:%s@%s:%s?ssl-mode=PREFERRED" % (user, __password, ip, port))
-        return connection
+        # return connection
+        con_obj = Mysql_connection(connection_my=connection,ip_my=ip,port_my=port)
+        return con_obj
     except:
         sys.tracebacklimit = 3
         raise Exception("Not possible to connect to data Node!")

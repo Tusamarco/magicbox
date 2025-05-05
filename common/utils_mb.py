@@ -178,3 +178,38 @@ def validate_and_check_connection(address, timeout=2):
     
     return result
 
+def parse_label_value_pairs(input_string, separator):
+    """
+    Parse a string of label=value pairs separated by semicolons into a dictionary.
+    
+    Args:
+        input_string (str): String containing label=value pairs separated by "<separator>
+        separator (str) : srng containing the separator
+        
+    Returns:
+        dict: Dictionary with labels as keys and corresponding values
+    """
+    result = {}
+    
+    if not input_string:
+        return result
+    
+    # Split the string by semicolon to get individual pairs
+    if separator !=None and len(separator) > 0:
+        pairs = input_string.split(separator)
+    
+    for pair in pairs:
+        # Strip whitespace and skip empty pairs
+        pair = pair.strip()
+        if not pair:
+            continue
+            
+        # Split each pair into label and value
+        if '=' in pair:
+            label, value = pair.split('=', 1)  # Split on first '=' only
+            result[label.strip()] = value.strip()
+        else:
+            # Handle cases where there's no '=' (treat as label with empty value)
+            result[pair.strip()] = ''
+    
+    return result
