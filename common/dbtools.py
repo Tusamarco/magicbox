@@ -11,6 +11,7 @@ except:
     pass
 
 import time
+from common import utils_mb
 
 
 
@@ -49,6 +50,8 @@ def get_mysql_shell_session(uri):
     user = shell.parse_uri(uri)['user']
     ip = shell.parse_uri(uri)['host']
     port = shell.parse_uri(uri)['port']
+    
+        
     if not "password" in shell.parse_uri(uri):
         __password = shell.prompt('Password: ',{'type': 'password'})
     else:
@@ -90,6 +93,13 @@ def get_mysql_classic_connection(uri):
     user = shell.parse_uri(uri)['user']
     ip = shell.parse_uri(uri)['host']
     port = shell.parse_uri(uri)['port']
+    
+    check = utils_mb.validate_and_check_connection(ip,5)
+    if not check["valid"]:
+        sys.tracebacklimit = 0
+        raise Exception("Invalid Host " + ip + ". Invalid IP or hostname.\nHostname or IP do not resolve" )
+        return None
+    
     if not "password" in shell.parse_uri(uri):
         __password = shell.prompt('Password: ',{'type': 'password'})
     else:
@@ -102,7 +112,7 @@ def get_mysql_classic_connection(uri):
             'port': port,
             'database': 'mysql',
             'raise_on_warnings': True,
-            'connection_timeout': 10, 
+            'connection_timeout': 0, 
             'client_flags': [ClientFlag.SECURE_CONNECTION],
             # 'conn_attrs':{"ssl-mode":"PREFERRED"},
             }
