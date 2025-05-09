@@ -21,6 +21,7 @@ from typing import Dict
 from magicbox.pxcpkg import pxc_obj
 from pxcpkg.pxc_obj import PXC_Node
 from pxcpkg.pxc_obj import PXC_Cluster
+import common.dbtools as dbtools
 
 importlib.reload(pxc_obj)
 
@@ -45,20 +46,40 @@ class Pxc_processor:
         self.use_ssl = 0
         self.uri = uri
         self.main_node = PXC_Node(uri)
+        self.cluster:PXC_Cluster = None
 
-    def get_pxc_cluster(self):
+    def set_pxc_cluster(self,uri):
         """
         This method will read the main_node to identify the other nodes in the cluster
-        to discover which nodes it will use the wsrep_incoming_addresseses and assign it to pxc_ip/port
-        It will also create the pxc cluster object filled with all the information
+        
         Args: 
             - self
+            - uri
+                if a valid URI to connect to the MySQL node is pass and the main ode is not present 
+                then the main node is created
+                Valid URI form: <user>:[<password>]@<ip>:[<port>]
+
         Raises:
             - exception for:
                 missing pxc_node
+                pxc_node not in primary state
         
         Returns         
             PXC_cluster
         """
-        if self.main_node != None:
-            pass
+        if self.main_node == None and dbtools.validate_uri(uri):
+            self.__init__(uri)
+            
+        self.cluster = PXC_Cluster(self.main_node)
+                           
+    def get_pxc_cluster(self):
+        """
+        Return the identified PXC cluster
+
+        Returns:
+            PXC Cluster: The cluster identified reading the PXC node we connect to
+        """
+        if self.cluster == None:
+            return None
+        else:
+            return self.cluster

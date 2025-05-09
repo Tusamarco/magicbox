@@ -89,8 +89,8 @@ def createProxy(uri):
     }
     
     
-@plugin_function("magicbox.createPXCProcessor")
-def createPXCprocessor(uri):
+@plugin_function("magicbox.create_pxc_processor")
+def create_pxc_processor(uri):
     """
     Create the PXCProcessor Object.
 
@@ -100,6 +100,10 @@ def createPXCprocessor(uri):
     Returns:
         The newly created PXC Processor object
     """
-    my_pxcproc = pxcprocessor.Pxc_processor(uri)
-    
+    processor = pxcprocessor.Pxc_processor(uri)
+    # return processor
+    return{
+        'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
+        'getPXCcluster': lambda: processor.get_pxc_cluster(),
+    }
     # print(my_pxcproc)

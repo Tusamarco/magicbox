@@ -51,6 +51,39 @@ def is_valid_ip(ip_str):
         return False
     
     
+import subprocess
+import platform
+
+def is_ip_reachable(ip_address, port, timeout=1):
+    """
+    Checks if an IP is reachable using ping (ICMP)
+    Returns True if reachable, False otherwise
+    """
+    sock = None
+    try:
+        sock = socket.create_connection((ip_address,port),1)
+        sock.detach()
+        if not sock == None:
+            return True
+        else:
+            return False
+       
+    except socket.error as e:
+        return False
+    finally:
+        if sock:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except (OSError, socket.error):
+                pass  # Socket not connected
+            try:
+                sock.close()
+            except (OSError, socket.error):
+                pass  # Close failed (already closed?)
+            
+            # Python doesn't require del, but it can help in some cases
+            del sock        
+
 
 # def is_valid_dns_and_resolves(dns_name):
 #     """
@@ -92,7 +125,7 @@ import socket
 import re
 from ipaddress import ip_address, IPv4Address, IPv6Address
 
-def validate_and_check_connection(address, timeout=2):
+def validate_and_check_connection(address,port, timeout=2):
     """
     Check if an address is a valid IP or DNS name and if it can establish a connection.
     
@@ -126,6 +159,9 @@ def validate_and_check_connection(address, timeout=2):
         # Check if it's an IP address first
         try:
             ip = ip_address(address)
+            if not is_ip_reachable(address,port):
+                return result
+
             result['valid'] = True
             result['resolved_ip'] = address
             if isinstance(ip, IPv4Address):

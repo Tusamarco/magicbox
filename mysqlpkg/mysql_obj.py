@@ -21,8 +21,14 @@ class Mysql_Node:
     Returns: One MySQL Node initialized 
 
     """
+    """
+    TODO
+    I really think that pw should net be here but at moment I have no better idea than this or raise the ask at each connection
+    which may prevent the auto reconnect and cluster discovery
+    """
     def __init__(self,uri=False):
         self.user = None
+        self.password:str = None
         self.ip = None
         self.port = None
         self.version = None
@@ -92,6 +98,8 @@ class Mysql_Node:
         self.session = my_connection.connection_my
         self.ip =  my_connection.ip_my
         self.port =  my_connection.port_my
+        self.user = my_connection.user
+        self.password = my_connection.password
         
         if self.session is not None:
             try:
@@ -110,4 +118,50 @@ class Mysql_Node:
                 sys.tracebacklimit = 0
                 raise Exception("Not possible to connect to data Node!")
 
-  
+    def get_variable_value(self,key:str):
+        """
+        return  the value of a variables variable
+
+        Args:
+            key (str): variables variable key 
+        
+        Raises:
+            KeyNot found execption 
+            Dict not initialized     
+        
+        Returns:
+            Value string  
+        """
+        
+        if self.variables is None:
+            raise Exception("Variables dictionary not initialized")
+        elif not self.variables:
+            raise Exception("Variables dictionary initialized but empty")
+        elif self.variables[key] is None:
+            raise KeyError("Wrong Key name or wrong resource parsed key: " + key)
+
+        return self.variables[key]    
+    
+    def get_status_value(self,key:str):
+        """
+        return  the value of a status variable
+
+        Args:
+            key (str): status variable key 
+        
+        Raises:
+            KeyNot found execption 
+            Dict not initialized     
+        
+        Returns:
+            Value string 
+        """
+        
+        if self.status is None:
+            raise Exception("Status dictionary not initialized")
+        elif not self.status:
+            raise Exception("Status dictionary initialized but empty")
+        elif self.status[key] is None:
+            raise KeyError("Wrong Key name or wrong resource parsed key: " + key)
+
+        return self.status[key]    

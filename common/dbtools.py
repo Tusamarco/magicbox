@@ -19,6 +19,8 @@ class Mysql_connection:
         connection_my:None = None
         ip_my:str = ""
         port_my:int = 0
+        password:str = ""
+        user:str =""
 
 
 import mysql.connector as mysql_connector 
@@ -103,7 +105,7 @@ def get_mysql_classic_connection(uri):
     ip = shell.parse_uri(uri)['host']
     port = shell.parse_uri(uri)['port']
     
-    check = utils_mb.validate_and_check_connection(ip,5)
+    check = utils_mb.validate_and_check_connection(ip,port,5)
     if not check["valid"]:
         sys.tracebacklimit = 0
         raise Exception("Invalid Host " + ip + ". Invalid IP or hostname.\nHostname or IP do not resolve" )
@@ -129,7 +131,7 @@ def get_mysql_classic_connection(uri):
 
         # mysql.get_classic_session("%s:%s@%s:%s?ssl-mode=PREFERRED" % (user, __password, ip, port))
         # return connection
-        con_obj = Mysql_connection(connection_my=connection,ip_my=ip,port_my=port)
+        con_obj = Mysql_connection(connection_my=connection,ip_my=ip,port_my=port,password=__password,user=user)
         return con_obj
     except:
         sys.tracebacklimit = 3
@@ -242,3 +244,50 @@ def get_status(connection,filter):
         raise Exception("Error while getting values!")
         return None
         
+        
+def validate_uri(uri:str):
+    """
+    Validate if a given uri is well defined
+    Valid URI form: <user>:[<password>]@<ip>:[<port>]
+
+    Args:
+        uri (str): incoming uri to check
+
+    Raises:
+        Exception: _description_
+
+    Returns:
+        boolean: true if the check was successful
+                 false if uri was malformed or ip not reachable    
+    """
+    _user = None
+    _ip = None
+    _port = 0
+    _uri = uri
+    
+    if uri == "":
+        raise Exception("Invalid uri to parse")
+    
+    _user = shell.parse_uri(_uri)['user']
+    _ip = shell.parse_uri(_uri)['host']
+    _port = shell.parse_uri(_uri)['port']
+    
+    if _user == "" or _ip == "" or _port == 0:
+        return False
+    
+    check = utils_mb.validate_and_check_connection(_ip,_port,5)
+    if not check["valid"]:
+        return False
+    
+    return True
+
+
+def ask_shell_for_value(message:str,):
+    _value = None
+    while _value == None:
+        _value = shell.prompt(message)
+        if _value == "Q":
+            break    
+    return _value
+    
+
