@@ -63,7 +63,7 @@ def is_ip_reachable(ip_address, port, timeout=1):
     try:
         sock = socket.create_connection((ip_address,port),1)
         sock.detach()
-        if not sock == None:
+        if sock is not None:
             return True
         else:
             return False
@@ -231,7 +231,7 @@ def parse_label_value_pairs(input_string, separator):
         return result
     
     # Split the string by semicolon to get individual pairs
-    if separator !=None and len(separator) > 0:
+    if separator is not None and len(separator) > 0:
         pairs = input_string.split(separator)
     
     for pair in pairs:

@@ -105,5 +105,6 @@ def create_pxc_processor(uri):
     return{
         'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
         'getPXCcluster': lambda: processor.get_pxc_cluster(),
+        'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
     }
     # print(my_pxcproc)

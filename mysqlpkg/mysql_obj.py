@@ -8,6 +8,10 @@ from typing import Dict
 #from mysqlsh import mysql
 #shell = mysqlsh.globals.shell
 
+import common.dbtools as dbtools
+importlib.reload(dbtools)
+
+
 class Mysql_Node:
     """
     Mysql_Node class
@@ -26,6 +30,7 @@ class Mysql_Node:
     I really think that pw should net be here but at moment I have no better idea than this or raise the ask at each connection
     which may prevent the auto reconnect and cluster discovery
     """
+   
     def __init__(self,uri=False):
         self.user = None
         self.password:str = None
@@ -88,11 +93,6 @@ class Mysql_Node:
         # self.has_primary_state     = False
         # PxcView                 PxcClusterView
 
-        
-        import common.dbtools as dbtools
-        
-        importlib.reload(dbtools)
-        
         my_connection =  dbtools.get_mysql_classic_connection(uri)
         # self.session = dbtools.get_mysql_classic_connection(uri)
         self.session = my_connection.connection_my
@@ -164,4 +164,8 @@ class Mysql_Node:
         elif self.status[key] is None:
             raise KeyError("Wrong Key name or wrong resource parsed key: " + key)
 
-        return self.status[key]    
+        return self.status[key]   
+    
+    def close_connection(self):
+        if self.session is not None:
+            dbtools.close_mysql_python_connection(self.session)

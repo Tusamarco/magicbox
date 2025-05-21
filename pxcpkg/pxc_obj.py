@@ -7,7 +7,7 @@ from typing import Dict
 
 from common import utils_mb
 import common.dbtools as dbtools
-from magicbox.mysqlpkg.mysql_obj import Mysql_Node # mysqlpkg.mysql_obj import Mysql_Node
+from mysqlpkg.mysql_obj import Mysql_Node # mysqlpkg.mysql_obj import Mysql_Node
 
 
 class PXC_Node(Mysql_Node):
@@ -30,7 +30,7 @@ class PXC_Node(Mysql_Node):
         self.pxc_port:str
 
         try:
-            if self.variables["wsrep_node_incoming_address"] != None and \
+            if self.variables["wsrep_node_incoming_address"] is not None and \
                 len(self.variables["wsrep_node_incoming_address"]) >0:
                     
                 if self.variables["wsrep_node_incoming_address"].index(":") > 0:
@@ -39,10 +39,6 @@ class PXC_Node(Mysql_Node):
                 else:
                     self.pxc_ip = self.variables["wsrep_node_incoming_address"]
                     self.pxc_port = "3306"
-
-            
-            
-
         except:
             # sys.tracebacklimit = 1
             raise KeyError("Wrong Key name or wrong resource parsed variables: wsrep_node_incoming_address")
@@ -50,7 +46,7 @@ class PXC_Node(Mysql_Node):
         
         
     def parse_provider(self):
-        if self.variables !=None \
+        if self.variables is not None \
             and len(self.variables) > 0:
                 self.wsrep_provider = utils_mb.parse_label_value_pairs(self.variables["wsrep_provider_options"], ";")
 #                print(self.wsrep_provider)
@@ -72,7 +68,7 @@ class PXC_Cluster():
         self.name:str 
         self.nodes:Dict[str,PXC_Node] = dict()
         
-        if pxc_node.cluster_name != None and len(pxc_node.cluster_name) > 0:
+        if pxc_node.cluster_name is not None and len(pxc_node.cluster_name) > 0:
             self.name:str = pxc_node.cluster_name
             self._fill_cluster()
             
@@ -110,7 +106,7 @@ class PXC_Cluster():
             raise Exception("Cluster is not in Primary state cannot proceed")
 
         _addresses = self.main_node.get_status_value("wsrep_incoming_addresses").split(",")
-        if _addresses != None and len(_addresses) > 0: 
+        if _addresses is not None and len(_addresses) > 0: 
             for address in _addresses:
                 _ip = ""
                 _port = 0
@@ -156,6 +152,29 @@ class PXC_Cluster():
                 
             # print(len(self.nodes))
         
-        
+    def close_all(self):
+        """
+        If object contains nodes then we loop, close connection to target
+        remove from dict 
+        delete it
+        """
+        if self.nodes is not None and len(self.nodes) > 0:
+            # for _key in self.nodes.keys():
+            #     _node = self.nodes.pop(_key)
+            #     del _node
+            for _node in list(self.nodes.values()):
+                _node.close_connection()
+                del self.nodes[_node.pxc_node_name]    
+                
+                
+    def __len__(self):
+        """
+        We implement len() here as cluster len == nodes.len()
+
+        Returns:
+            int: length of the nodes
+        """
+        if self.nodes is not None:
+            return len(self.nodes)            
 class Pxc_Exception(Exception):
     pass

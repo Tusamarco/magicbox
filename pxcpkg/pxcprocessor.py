@@ -18,7 +18,11 @@ from typing import Dict
 # from mysqlsh import mysql
 # shell = mysqlsh.globals.shell
 
-from magicbox.pxcpkg import pxc_obj
+try:
+    from pxcpkg import pxc_obj
+except:
+    pass
+
 from pxcpkg.pxc_obj import PXC_Node
 from pxcpkg.pxc_obj import PXC_Cluster
 import common.dbtools as dbtools
@@ -48,7 +52,7 @@ class Pxc_processor:
         self.main_node = PXC_Node(uri)
         self.cluster:PXC_Cluster = None
 
-    def set_pxc_cluster(self,uri):
+    def set_pxc_cluster(self,uri=None):
         """
         This method will read the main_node to identify the other nodes in the cluster
         
@@ -67,10 +71,32 @@ class Pxc_processor:
         Returns         
             PXC_cluster
         """
-        if self.main_node == None and dbtools.validate_uri(uri):
-            self.__init__(uri)
-            
-        self.cluster = PXC_Cluster(self.main_node)
+        # Only if self.cluster is None otherwise ignore 
+        if self.cluster is None or len(self.cluster) == 0 :
+            # We also check the uri if is different
+            # We close the connection on Main Node and rebuild the processor based on the new uri
+            # If uri is not valid we do not reset the object and raise an error
+            try:
+                if not len(uri) == 0 and not uri == self.uri and dbtools.validate_uri(uri):
+                    self.uri = uri
+                    self.main_node.close_connection
+                    self.main_node = None
+                else:
+                    print("The uri: "  + uri + " does not resolve correctly. Will use the Main Node one: " +self.uri)
+            finally:
+                if dbtools.validate_uri(self.uri):
+                    if self.main_node is not None:
+                        self.main_node.close_connection()
+                        self.main_node = None
+                        
+                    self.__init__(self.uri)
+                
+            self.cluster = PXC_Cluster(self.main_node)
+            return self.get_pxc_cluster()
+        else:
+            print("Cluster " + self.cluster.name + " is already define and filled, if you want to modify it use refreshPxcCluster method")
+            return self.get_pxc_cluster()
+        
                            
     def get_pxc_cluster(self):
         """
@@ -79,7 +105,26 @@ class Pxc_processor:
         Returns:
             PXC Cluster: The cluster identified reading the PXC node we connect to
         """
-        if self.cluster == None:
+        if self.cluster is None:
             return None
         else:
             return self.cluster
+        
+    def refresh_pxc_cluster(self,uri):
+        """
+        Refresh action force the given cluster to close all conenctions to the nodes
+        Then to reopen them pointing to the given uri if given, otherwise the previously assigned uri will be used
+
+        Args:
+            uri (_type_): Require a well form uri to connect "user:[pass]@host:port" 
+                          If Password is not in it will ask it interactively 
+
+        Returns:
+            PXC_cluster
+        """
+        if self.cluster is not None and len(self.cluster) > 0 :
+            self.cluster.close_all()
+            return self.set_pxc_cluster(uri)
+        else:
+            print(self.cluster.name +" has no nodes, nothing to refresh")
+        

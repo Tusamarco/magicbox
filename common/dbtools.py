@@ -284,7 +284,7 @@ def validate_uri(uri:str):
 
 def ask_shell_for_value(message:str,):
     _value = None
-    while _value == None:
+    while _value is None:
         _value = shell.prompt(message)
         if _value == "Q":
             break    
