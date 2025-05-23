@@ -58,6 +58,7 @@ class PXC_Node(Mysql_Node):
         return False
     
 class PXC_Cluster():
+    from proxysqlpkg.proxysql_obj import ProxySQL_Node
     """
     PXC_Cluster 
     
@@ -185,5 +186,33 @@ class PXC_Cluster():
         """
         if self.nodes is not None:
             return len(self.nodes)            
+
+    def add_nodes_to_proxysql(self, proxy_node:ProxySQL_Node):
+        """
+        1) build ProxySQL node object
+        2) verify if servers inside Proxy already exists 
+        3) we need to create 2 different set of HG Main hg 100-101 for w-r and 8000 for configuration 
+            - verify if hgs already exists 
+                - if exists verify if any node inside hgs are the same
+                - if not, it means this is a different cluster and we need to build a different one.
+                    - change HGs ids and check ... untill we found a good set
+                - if is the same then no need to add again the nodes
+            - create new hgs (by adding the servers)
+                - look for Main node and identify which is the corrispondent node in Nodes
+                    make it primary true 
+                - for each node in nodes:
+                    - if primary add it to 100/101 and set weight 1000
+                        - add to 8000 set weight = 1000
+                        - add to 8001 set weight = 1000
+                    - if not primary add it to 1001 and set weight 1000
+                        - add to 8000 set weight = weight -1
+                        - add to 8001 set weight = 1000
+                - comment for each server is the name and role 
+            - Add users set all users as by defult pointing to the write HG
+            - add query rules For 100/101 linked to username. (I am not sure but this is to be consistent with that shit of proxysql-admin)
+
+        """
+        return True
+
 class Pxc_Exception(Exception):
     pass

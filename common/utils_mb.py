@@ -287,6 +287,7 @@ def prompt_input(prompt, type="text", options=None):
 
     elif type == "password":
         # password = getpass.getpass(f"{prompt}: ")
+        # password = hidden_input(f"{prompt}: ")
         password = shell.prompt('Password: ',{'type': 'password'})
         # password = getpass.getpass(f"{prompt}: ")
         #pwinput.pwinput("Enter password: ", mask='*')
@@ -344,4 +345,23 @@ def prompt_input(prompt, type="text", options=None):
     else:
         raise ValueError(f"Unsupported input type: {type}")
     
-   
+
+def hidden_input(prompt:str = "Password"):
+    import getpass
+    import subprocess
+
+    print(prompt)
+
+    try:
+        subprocess.run(["stty", "-echo"], check=True)
+    except subprocess.CalledProcessError:
+        print("Error executing stty -echo")
+        sys.exit(1)
+
+    password = getpass.getpass(prompt="")
+
+    try:
+        subprocess.run(["stty", "echo"], check=True)
+    except subprocess.CalledProcessError:
+        print("Error executing stty echo")
+        sys.exit(1)
