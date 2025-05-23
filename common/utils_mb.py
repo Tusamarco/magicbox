@@ -6,7 +6,18 @@ Module collecting useful common functions
 import ipaddress
 import socket
 import re
+import sys
 from ipaddress import ip_address
+import os
+from pathlib import Path
+
+try:
+    import mysqlsh
+    from mysqlsh import mysql
+    shell = mysqlsh.globals.shell
+except: 
+    pass
+
 
 def is_same_c_network(ip1, ip2):
     """
@@ -249,3 +260,88 @@ def parse_label_value_pairs(input_string, separator):
             result[pair.strip()] = ''
     
     return result
+
+def prompt_input(prompt, type="text", options=None):
+    """
+    function that takes a type and prompts the user accordingly. It supports the following input types:
+    "text": free text input
+    "password": masked input
+    "confirm": yes/no input
+    "select": choose from a list of options
+    "fileOpen": path input, optionally checks existence
+    "fileSave": path input, checks if file can be created
+    "directory": path input, checks if directory exists
+
+    Args:
+        prompt (String): the text used in the input
+        type (str, optional): Defaults to "text".
+        options (list, optional): A listo containing the different options to show. Defaults to None.
+
+    Raises:
+        ValueError: Unsupported type
+    Returns:
+        string: the requested input 
+    """
+    if type == "text":
+        return input(f"{prompt}: ")
+
+    elif type == "password":
+        # password = getpass.getpass(f"{prompt}: ")
+        password = shell.prompt('Password: ',{'type': 'password'})
+        # password = getpass.getpass(f"{prompt}: ")
+        #pwinput.pwinput("Enter password: ", mask='*')
+        return password
+        
+
+    elif type == "confirm":
+        while True:
+            response = input(f"{prompt} (y/n): ").lower()
+            if response in ['y', 'yes']:
+                return True
+            elif response in ['n', 'no']:
+                return False
+            print("Please enter 'y' or 'n'.")
+
+    elif type == "select":
+        if not options or not isinstance(options, list):
+            raise ValueError("For 'select' type, provide a list of options.")
+        print(prompt)
+        for i, option in enumerate(options, 1):
+            print(f"{i}. {option}")
+        while True:
+            try:
+                choice = int(input("Enter number of your choice: "))
+                if 1 <= choice <= len(options):
+                    return options[choice - 1]
+            except ValueError:
+                pass
+            print("Invalid choice. Please try again.")
+
+    elif type == "fileOpen":
+        while True:
+            path = input(f"{prompt} (enter file path): ")
+            if os.path.isfile(path):
+                return path
+            print("File does not exist. Try again.")
+
+    elif type == "fileSave":
+        while True:
+            path = input(f"{prompt} (enter file path to save): ")
+            try:
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
+                open(path, 'a').close()  # Try to create or touch the file
+                return path
+            except Exception as e:
+                print(f"Cannot write to file: {e}")
+
+    elif type == "directory":
+        while True:
+            path = input(f"{prompt} (enter directory path): ")
+            if os.path.isdir(path):
+                return path
+            print("Directory does not exist. Try again.")
+
+    else:
+        raise ValueError(f"Unsupported input type: {type}")
+    
+   

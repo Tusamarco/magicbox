@@ -2,13 +2,16 @@
     Set of functionalities that allow to connect to a data base 
     Also some most commonly used operations
 """
-try:
-    import mysqlsh
-    import sys
-    from mysqlsh import mysql
-    shell = mysqlsh.globals.shell
-except: 
-    pass
+import re
+import ipaddress
+from urllib.parse import urlparse
+import sys
+# try:
+#     import mysqlsh
+#     from mysqlsh import mysql
+#     shell = mysqlsh.globals.shell
+# except: 
+#     pass
 
 import time
 from  dataclasses import dataclass
@@ -28,49 +31,49 @@ from mysql.connector.constants import ClientFlag
 # from mysql.connector.connection_cext import CMySQLConnection
 from mysql.connector.aio.abstracts import MySQLConnectionAbstract
 
-def get_mysql_shell_session(uri):
-    """_summary_
-    Returns a mysql shell classic session
-    https://dev.mysql.com/doc/dev/mysqlsh-api-javascript/8.4/classmysqlsh_1_1mysql_1_1_classic_session.html 
+# def get_mysql_shell_session(uri):
+#     """_summary_
+#     Returns a mysql shell classic session
+#     https://dev.mysql.com/doc/dev/mysqlsh-api-javascript/8.4/classmysqlsh_1_1mysql_1_1_classic_session.html 
 
-    Require a well form uri to connect "user:[pass]@host:port" 
-    If Password is not in it will ask it interactively 
+#     Require a well form uri to connect "user:[pass]@host:port" 
+#     If Password is not in it will ask it interactively 
 
-    Args:
-        uri (string): requires a valid URI to connect to the MySQL node
-                      Valid URI form: <user>:[<password>]@<ip>:[<port>]
-    Raises:
-        Exception: connection 
-    Returns:
-        session: mysqlsh session (https://dev.mysql.com/doc/dev/mysqlsh-api-javascript/8.4/classmysqlsh_1_1mysql_1_1_classic_session.html)
-    """
+#     Args:
+#         uri (string): requires a valid URI to connect to the MySQL node
+#                       Valid URI form: <user>:[<password>]@<ip>:[<port>]
+#     Raises:
+#         Exception: connection 
+#     Returns:
+#         session: mysqlsh session (https://dev.mysql.com/doc/dev/mysqlsh-api-javascript/8.4/classmysqlsh_1_1mysql_1_1_classic_session.html)
+#     """
     
-    user = None
-    ip = None
-    port = None
-    version = None
-    use_ssl = 0
-    uri = uri
+#     user = None
+#     ip = None
+#     port = None
+#     version = None
+#     use_ssl = 0
+#     uri = uri
     
-    if uri == "":
-        raise Exception("Invalid uri to parse")
+#     if uri == "":
+#         raise Exception("Invalid uri to parse")
     
-    user = shell.parse_uri(uri)['user']
-    ip = shell.parse_uri(uri)['host']
-    port = shell.parse_uri(uri)['port']
+#     user = shell.parse_uri(uri)['user']
+#     ip = shell.parse_uri(uri)['host']
+#     port = shell.parse_uri(uri)['port']
     
         
-    if not "password" in shell.parse_uri(uri):
-        __password = ask_shell_for_value('Password: ',{'type': 'password'})
-    else:
-        __password = shell.parse_uri(uri)['password']
+#     if not "password" in shell.parse_uri(uri):
+#         __password = ask_shell_for_value('Password: ',{'type': 'password'})
+#     else:
+#         __password = shell.parse_uri(uri)['password']
     
-    try:
-        session = mysql.get_classic_session("%s:%s@%s:%s?ssl-mode=PREFERRED" % (user, __password, ip, port))
-        return session
-    except:
-        sys.tracebacklimit = 3
-        raise Exception("Not possible to connect to data Node!")
+#     try:
+#         session = mysql.get_classic_session("%s:%s@%s:%s?ssl-mode=PREFERRED" % (user, __password, ip, port))
+#         return session
+#     except:
+#         sys.tracebacklimit = 3
+#         raise Exception("Not possible to connect to data Node!")
 
 
 def get_mysql_classic_connection(uri):
@@ -102,9 +105,14 @@ def get_mysql_classic_connection(uri):
     if uri == "":
         raise Exception("Invalid uri to parse")
     
-    user = shell.parse_uri(uri)['user']
-    ip = shell.parse_uri(uri)['host']
-    port = shell.parse_uri(uri)['port']
+    # user = shell.parse_uri(uri)['user']
+    # ip = shell.parse_uri(uri)['host']
+    # port = shell.parse_uri(uri)['port']
+    
+    dns = parse_db_url(uri)
+    user = dns["user"]
+    ip = dns["host"]
+    port = dns["port"]
     
     check = utils_mb.validate_and_check_connection(ip,port,5)
     if not check["valid"]:
@@ -112,11 +120,13 @@ def get_mysql_classic_connection(uri):
         raise Exception("Invalid Host " + ip + ". Invalid IP or hostname.\nHostname or IP do not resolve" )
         return None
     
-    if not "password" in shell.parse_uri(uri):
+    if not "password" in dns or dns["password"] is None: #shell.parse_uri(uri):
         # __password = shell.prompt('Password: ',{'type': 'password'})
-        __password = ask_shell_for_value('Password: ',{'type': 'password'})
+        # __password = ask_shell_for_value('Password: ',{'type': 'password'})
+        __password = ask_shell_for_value('Password: ','password')
     else:
-        __password = shell.parse_uri(uri)['password']
+        # __password = shell.parse_uri(uri)['password']
+        __password = dns['password']        
     try:
         config = {
             'user': user,
@@ -271,9 +281,10 @@ def validate_uri(uri:str):
     if uri == "":
         raise Exception("Invalid uri to parse")
     
-    _user = shell.parse_uri(_uri)['user']
-    _ip = shell.parse_uri(_uri)['host']
-    _port = shell.parse_uri(_uri)['port']
+    dns = parse_db_url(uri)
+    _user = dns['user']
+    _ip = dns['host']
+    _port = dns['port']
     
     if _user == "" or _ip == "" or _port == 0:
         return False
@@ -285,12 +296,66 @@ def validate_uri(uri:str):
     return True
 
 
-def ask_shell_for_value(message:str,options={}):
+def ask_shell_for_value(message:str,type:str = "text", options=None):
     _value = None
     while _value is None:
-        _value = shell.prompt(message,options)
+        # _value = shell.prompt(message,options)
+        _value = utils_mb.prompt_input(message,type, options)
         if _value == "Q":
             break    
     return _value
     
+        
+def parse_db_url(url):
+    """
+    Split the URL into components
 
+    Args:
+        uri (string): requires a valid URI to connect to the MySQL node
+                      Valid URI form: <user>:[<password>]@<ip>:[<port>]
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        dict:  {
+                    'user': user,
+                    'password': password,
+                    'ip': host if ip_version in ['IPv4', 'IPv6'] else None,
+                    'host': host,
+                    'port': port,
+                    'ip_version': ip_version
+                    }
+    """    
+    try:
+        # Split user info and host info
+        user_info, host_info = url.split('@')
+        
+        # Split user and password
+        if ':' in user_info:
+            user, password = user_info.split(':', 1)
+        else:
+            user = user_info
+            password = None
+
+        # Handle IPv6 addresses enclosed in brackets
+        if host_info.startswith('['):
+            ip_end = host_info.index(']')
+            ip = host_info[1:ip_end]
+            port = host_info[ip_end + 2:]  # skip "]:" to get the port
+        else:
+            ip, port = host_info.split(':', 1)
+
+        # Check IP version
+        ip_obj = ipaddress.ip_address(ip)
+        ip_type = "IPv6" if isinstance(ip_obj, ipaddress.IPv6Address) else "IPv4"
+
+        return {
+            'user': user,
+            'password': password,
+            'host': ip,
+            'port': port,
+            'ip_type': ip_type
+        }
+
+    except Exception as e:
+        raise ValueError(f"Invalid URL format: {e}")

@@ -158,6 +158,7 @@ class Pxc_processor:
             self.proxysql_node = ProxySQL_Node(uri)
             return self.get_proxysql_node()
         else:
+            print("Invalid uri: " + uri)
             return None
                            
     def get_proxysql_node(self):

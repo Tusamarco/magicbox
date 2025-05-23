@@ -6,13 +6,39 @@ try:
     from mysqlsh.plugin_manager import plugin, plugin_function
 except:
     pass
+
+from pxcpkg  import pxcprocessor
+importlib.reload(pxcprocessor)
+
+
 @plugin
-class magicbox:
+class Magicbox:
     """
     The magicbox plugin 
 
     The magicbox plugin is going to bring you joy and candies
     """
+    def createPxcProcessor(uri):
+        """
+        Create the PXCProcessor Object.
+
+        Args:
+            uri (string): Connection uri to any PXC node part of the cluster.
+
+        Returns:
+            The newly created PXC Processor object
+        """
+        processor = pxcprocessor.Pxc_processor(uri)
+        # return processor
+        return{
+            'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
+            'getPXCcluster': lambda: processor.get_pxc_cluster(),
+            'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
+            'setProxySQL': lambda uri="": processor.set_proxysql_node(uri),
+            'getProxySQL': lambda: processor.get_proxy_sql_node(),
+
+        }
+
 
 import debugpy
 debugpy.listen(("localhost", 5678))
@@ -62,11 +88,8 @@ print("Debugger attached.")
 #         shell.dump_rows(r)
 
 # from proxysqlpkg import proxysql
-from pxcpkg  import pxcprocessor 
 
-importlib.reload(pxcprocessor)
-
-# @plugin_function("magicbox.createProxysql")
+@plugin_function("magicbox.createProxysql")
 def createProxy(uri):
     """
     Create the ProxySQL Object.
@@ -112,4 +135,5 @@ def create_pxc_processor(uri):
         'getProxySQL': lambda: processor.get_proxy_sql_node(),
 
     }
-    # print(my_pxcproc)
+
+# print("wait")

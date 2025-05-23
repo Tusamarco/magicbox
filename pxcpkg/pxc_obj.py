@@ -171,9 +171,6 @@ class PXC_Cluster():
         delete it
         """
         if self.nodes is not None and len(self.nodes) > 0:
-            # for _key in self.nodes.keys():
-            #     _node = self.nodes.pop(_key)
-            #     del _node
             for _node in list(self.nodes.values()):
                 _node.close_connection()
                 del self.nodes[_node.pxc_node_name]    
