@@ -5,7 +5,7 @@ PXC Processor module contains classes and methods related to PXC cluster actions
 Classes:
  - PXC_Node 
  - PXC_cluster
- -Pxc_processor
+ - Pxc_processor
 """
 
 # import mysqlsh
@@ -25,6 +25,7 @@ except:
 
 from pxcpkg.pxc_obj import PXC_Node
 from pxcpkg.pxc_obj import PXC_Cluster
+from proxysqlpkg.proxysql_obj import ProxySQL_Node
 import common.dbtools as dbtools
 
 importlib.reload(pxc_obj)
@@ -51,6 +52,7 @@ class Pxc_processor:
         self.uri = uri
         self.main_node = PXC_Node(uri)
         self.cluster:PXC_Cluster = None
+        self.proxysql_node:ProxySQL_Node = None
 
     def set_pxc_cluster(self,uri=None):
         """
@@ -126,5 +128,46 @@ class Pxc_processor:
             self.cluster.close_all()
             return self.set_pxc_cluster(uri)
         else:
-            print(self.cluster.name +" has no nodes, nothing to refresh")
+            if self.cluster is None:
+                print("Cluster not initialized, nothing to refresh, use processor.setPXCcluster() first")
+            else:    
+                print(self.cluster.name +" has no nodes, nothing to refresh")
+
+    def set_proxysql_node(self,uri=None):
+        """
+        This method will add a proxysql node to the processor
+        Then we can use this node to setup/manage the PXC cluster
         
+        Args: 
+            - self
+            - uri
+                if a valid URI to connect to the MySQL node is pass and the main ode is not present 
+                then the main node is created
+                Valid URI form: <user>:[<password>]@<ip>:[<port>]
+
+        Raises:
+            - exception for:
+                missing proxysql node
+
+        
+        Returns         
+            proxysql node
+            or None if invalid uri
+        """
+        if dbtools.validate_uri(uri):
+            self.proxysql_node = ProxySQL_Node(uri)
+            return self.get_proxysql_node()
+        else:
+            return None
+                           
+    def get_proxysql_node(self):
+        """
+        Return the identified PXC cluster
+
+        Returns:
+            PXC Cluster: The cluster identified reading the PXC node we connect to
+        """
+        if self.proxysql_node is None:
+            return None
+        else:
+            return self.proxysql_node

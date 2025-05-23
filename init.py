@@ -1,9 +1,11 @@
 # init.py
 # -------
 import importlib
-import mysqlsh
-from mysqlsh.plugin_manager import plugin, plugin_function
-
+try:
+    import mysqlsh
+    from mysqlsh.plugin_manager import plugin, plugin_function
+except:
+    pass
 @plugin
 class magicbox:
     """
@@ -59,12 +61,12 @@ print("Debugger attached.")
 #         r = session.run_sql("show schemas")
 #         shell.dump_rows(r)
 
-from magicbox.proxysqlpkg import proxysql
-from magicbox.pxcpkg  import pxcprocessor 
+# from proxysqlpkg import proxysql
+from pxcpkg  import pxcprocessor 
 
 importlib.reload(pxcprocessor)
 
-@plugin_function("magicbox.createProxysql")
+# @plugin_function("magicbox.createProxysql")
 def createProxy(uri):
     """
     Create the ProxySQL Object.
@@ -106,5 +108,8 @@ def create_pxc_processor(uri):
         'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
         'getPXCcluster': lambda: processor.get_pxc_cluster(),
         'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
+        'setProxySQL': lambda uri="": processor.set_proxysql_node(uri),
+        'getProxySQL': lambda: processor.get_proxy_sql_node(),
+
     }
     # print(my_pxcproc)

@@ -61,9 +61,10 @@ def get_mysql_shell_session(uri):
     
         
     if not "password" in shell.parse_uri(uri):
-        __password = shell.prompt('Password: ',{'type': 'password'})
+        __password = ask_shell_for_value('Password: ',{'type': 'password'})
     else:
         __password = shell.parse_uri(uri)['password']
+    
     try:
         session = mysql.get_classic_session("%s:%s@%s:%s?ssl-mode=PREFERRED" % (user, __password, ip, port))
         return session
@@ -112,7 +113,8 @@ def get_mysql_classic_connection(uri):
         return None
     
     if not "password" in shell.parse_uri(uri):
-        __password = shell.prompt('Password: ',{'type': 'password'})
+        # __password = shell.prompt('Password: ',{'type': 'password'})
+        __password = ask_shell_for_value('Password: ',{'type': 'password'})
     else:
         __password = shell.parse_uri(uri)['password']
     try:
@@ -166,7 +168,7 @@ def close_mysql_python_connection(connection):
             raise Exception("Error while closing connection!")
             return False
 
-def get_variables(connection,filter):
+def get_variables(connection,filter,is_global=True):
     """
     This function returns a dictionary compose by <Variable name>:<Variable value>
     Accept connection object as incoming parameter and a filter value that must follow the valid MySQL syntax for SHOW
@@ -184,7 +186,8 @@ def get_variables(connection,filter):
     Returns:
         dict[string,string]: dictionary compose by <Variable name>:<Variable value>
     """
-    sql = "Show global variables"
+    
+    sql = f"show {'global ' if is_global else ''}variables"
     try:
         if connection.is_connected():
             variables = dict[str,str]
@@ -205,7 +208,7 @@ def get_variables(connection,filter):
         return None
         
 
-def get_status(connection,filter):
+def get_status(connection,filter,is_global=True):
     """
     This function returns a dictionary compose by <Variable name>:<Status value>
     Accept connection object as incoming parameter and a filter value that must follow the valid MySQL syntax for SHOW
@@ -224,7 +227,7 @@ def get_status(connection,filter):
         dict[string,string]: dictionary compose by <Variable name>:<Status value>
     """
 
-    sql = "Show global status"
+    sql = f"show {'global ' if is_global else ''}status"
     try:
         if connection.is_connected():
             variables = dict[str,str]
@@ -282,10 +285,10 @@ def validate_uri(uri:str):
     return True
 
 
-def ask_shell_for_value(message:str,):
+def ask_shell_for_value(message:str,options={}):
     _value = None
     while _value is None:
-        _value = shell.prompt(message)
+        _value = shell.prompt(message,options)
         if _value == "Q":
             break    
     return _value

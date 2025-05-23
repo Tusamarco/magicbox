@@ -51,7 +51,7 @@ class Mysql_Node:
         # self.conn_used     = 0
         # self.dns:str       = ""
         # self.HostgroupId  = 0
-        self.hostgroups   = [] #Hostgroup
+        # self.hostgroups   = [] #Hostgroup
         # self.ip:str           = ""
         # MaxConnection     int
         # MaxLatency        int
@@ -103,10 +103,13 @@ class Mysql_Node:
         
         if self.session is not None:
             try:
-                self.variables = dbtools.get_variables(self.session,"")
-                self.status = dbtools.get_status(self.session,"")                
-
-                print("Connected to data node %s (%s - %s) " % (self.variables["hostname"],self.variables["version"],self.variables["version_comment"]))
+                if "ProxySQL_Node" in type(self).__name__:
+                    self.variables = dbtools.get_variables(self.session,"",False)
+                    print("Connected to data node %s" % (self.ip +":" + str(self.port)))
+                else:    
+                    self.variables = dbtools.get_variables(self.session,"")
+                    self.status = dbtools.get_status(self.session,"")                
+                    print("Connected to data node %s (%s - %s) " % (self.variables["hostname"],self.variables["version"],self.variables["version_comment"]))
                 '''
                  TODO
                  to find a common way to close the connection to the db at the end of the operation
@@ -115,7 +118,7 @@ class Mysql_Node:
                 
                 
             except:
-                sys.tracebacklimit = 0
+                sys.tracebacklimit = 3
                 raise Exception("Not possible to connect to data Node!")
 
     def get_variable_value(self,key:str):

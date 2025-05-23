@@ -28,6 +28,7 @@ class PXC_Node(Mysql_Node):
         self.parse_provider()
         self.pxc_ip:str
         self.pxc_port:str
+        self.is_main_node:bool = False
 
         try:
             if self.variables["wsrep_node_incoming_address"] is not None and \
@@ -51,7 +52,7 @@ class PXC_Node(Mysql_Node):
                 self.wsrep_provider = utils_mb.parse_label_value_pairs(self.variables["wsrep_provider_options"], ";")
 #                print(self.wsrep_provider)
 
-    def is_primary(self):
+    def cluster_is_primary(self):
         if self.status["wsrep_cluster_status"] == "Primary":
             return True
         return False
@@ -67,6 +68,7 @@ class PXC_Cluster():
         self.main_node = pxc_node
         self.name:str 
         self.nodes:Dict[str,PXC_Node] = dict()
+        self.is_primary:bool = False
         
         if pxc_node.cluster_name is not None and len(pxc_node.cluster_name) > 0:
             self.name:str = pxc_node.cluster_name
@@ -102,8 +104,10 @@ class PXC_Cluster():
         3) connect to each node (using same credential as for main_node) 
         4) build a PXC cluster object with all nodes in
         """
-        if not self.main_node.is_primary():
+        if not self.main_node.cluster_is_primary():
             raise Exception("Cluster is not in Primary state cannot proceed")
+        else:
+            self.is_primary = True
 
         _addresses = self.main_node.get_status_value("wsrep_incoming_addresses").split(",")
         if _addresses is not None and len(_addresses) > 0: 
@@ -147,9 +151,17 @@ class PXC_Cluster():
      
                 _node = PXC_Node(_uri)
                 
+                """
+                If node is valid we will add to the cluster plus will do some check and settings
+                - if the node has same name of the Main node we will set the node as Main node (Primary/preferred writer)
+                """
                 if _node is not None:
-                    self.nodes[_node.pxc_node_name]=_node
-                
+                    if _node.pxc_node_name == self.main_node.pxc_node_name:
+                        _node.is_main_node = True
+                    
+                    # Finally we add the node to the cluster nodes
+                    self.nodes[_node.pxc_node_name]=_node                
+            
             # print(len(self.nodes))
         
     def close_all(self):
