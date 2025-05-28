@@ -79,12 +79,12 @@ class Pxc_processor:
             # We close the connection on Main Node and rebuild the processor based on the new uri
             # If uri is not valid we do not reset the object and raise an error
             try:
-                if not len(uri) == 0 and not uri == self.uri and dbtools.validate_uri(uri):
+                if uri is not None and not len(uri) == 0 and not uri == self.uri and dbtools.validate_uri(uri):
                     self.uri = uri
                     self.main_node.close_connection
                     self.main_node = None
                 else:
-                    print("The uri: "  + uri + " does not resolve correctly. Will use the Main Node one: " +self.uri)
+                    print("The uri does not resolve correctly or is empty. Will use the Main Node one: " +self.uri)
             finally:
                 if dbtools.validate_uri(self.uri):
                     if self.main_node is not None:

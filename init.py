@@ -18,26 +18,29 @@ class Magicbox:
 
     The magicbox plugin is going to bring you joy and candies
     """
-    def createPxcProcessor(uri):
-        """
-        Create the PXCProcessor Object.
-
-        Args:
-            uri (string): Connection uri to any PXC node part of the cluster.
-
-        Returns:
-            The newly created PXC Processor object
-        """
-        processor = pxcprocessor.Pxc_processor(uri)
-        # return processor
-        return{
-            'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
-            'getPXCcluster': lambda: processor.get_pxc_cluster(),
-            'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
-            'setProxySQL': lambda uri="": processor.set_proxysql_node(uri),
-            'getProxySQL': lambda: processor.get_proxy_sql_node(),
-
-        }
+    # def __init__(self):
+    #     pass
+    #
+    # def createPxcProcessor(uri):
+    #     """
+    #     Create the PXCProcessor Object.
+    #
+    #     Args:
+    #         uri (string): Connection uri to any PXC node part of the cluster.
+    #
+    #     Returns:
+    #         The newly created PXC Processor object
+    #     """
+    #     processor = pxcprocessor.Pxc_processor(uri)
+    #     # return processor
+    #     return{
+    #         'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
+    #         'getPXCcluster': lambda: processor.get_pxc_cluster(),
+    #         'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
+    #         'setProxySQL': lambda uri="": processor.set_proxysql_node(uri),
+    #         'getProxySQL': lambda: processor.get_proxy_sql_node(),
+    #
+    #     }
 
 
 import debugpy

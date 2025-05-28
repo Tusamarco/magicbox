@@ -42,7 +42,7 @@ class ProxySQL_Node(Mysql_Node):
 #        self.actionNodeList:Dict[str,PXC_Node] = {}
         super().__init__(uri)
         self.dns:str            = ""
-        self.hostgoups:Dict[int,Hostgroup] ={}
+        self.hostgroups:Dict[int,Hostgroup] ={}
         self.monitorPassword = ""
         self.monitorUser    = ""
         self.connection     = None
