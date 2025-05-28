@@ -227,12 +227,12 @@ class PXCCluster():
             port = node.port
             it_exists = False
             sql = f"select hostgroup_id, hostname, port, status from mysql_servers where hostname='{ip}' and port={port}"
-            cursor = proxy_node.session.cursor(dictionary=False)
+            cursor = proxy_node.session.cursor(dictionary=True)
             cursor.execute(sql)
             mysql_servers = cursor.fetchall()
             for server in mysql_servers:
-                if server["hostname"] == ip and server["port"] == port:
-                   print(f"Node {ip}:{port} already exists in hostgroup {server["hostgroup_id"]}.\n you need to manually cleanup or force the operation")
+                if server["hostname"] == ip and server["port"] == str(port):
+                   print(f"Node {ip}:{port} already exists in hostgroup {server["hostgroup_id"]}. You need to manually cleanup or force the operation")
 
         return True
 
