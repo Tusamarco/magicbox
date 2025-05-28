@@ -3,8 +3,14 @@
 """
 
 from typing import Dict
-from pxcpkg.pxc_obj import PXC_Node 
-from mysqlpkg.mysql_obj import Mysql_Node
+from pxcpkg.pxc_obj import PXCNode
+from mysqlpkg.mysql_obj import MysqlNode
+
+class ServerId:
+    hg_id:int = 0
+    server_ip:str = ""
+    server_port:int = 0
+
 
 class ProxySQLCluster:
     """
@@ -19,13 +25,13 @@ class ProxySQLCluster:
                                   Valid URI form: <user>:[<password>]@<ip>:[<port>]
         """
         self.name = ""
-        self.nodes:Dict[str, ProxySQL_Node] = {}
+        self.nodes:Dict[str, ProxySQLNode] = {}
         self.active = False
         self.user = ""
         self.password = ""
         
     
-class ProxySQL_Node(Mysql_Node):
+class ProxySQLNode(MysqlNode):
     """
     ProxySQL Object.
     """
@@ -42,7 +48,7 @@ class ProxySQL_Node(Mysql_Node):
 #        self.actionNodeList:Dict[str,PXC_Node] = {}
         super().__init__(uri)
         self.dns:str            = ""
-        self.hostgroups:Dict[int,Hostgroup] ={}
+        self.mysql_nodes:Dict[Hostgroup, ProxyMysqlDataNode] = {}
         self.monitorPassword = ""
         self.monitorUser    = ""
         self.connection     = None
@@ -77,31 +83,19 @@ class ProxySQL_Node(Mysql_Node):
         """
         return False
     
-    def set_hostgroup(self, hg_id:int = 0,hg_type:str = None):
-        """
-        Initialize an host group
-        
-        Args:
-            hd_id (int, optional): _description_. Defaults to 0.
-            hg_type (str, optional): _description_. Defaults to "r".
-
-        Returns:
-            Hostgroup: Return an Hostgroup with minimal setup
-        """
-        hg = Hostgroup(hg_id)
-       
-        match hg_type:
-            case "w":
-                hg.is_writer = True
-            case "r":
-                hg.is_reader = True
-            case "c":
-                hg.is_catalog = True
-            case "o":
-                hg.is_offline = True
-            case _:
-                pass
-        return hg
+    # def set_hostgroup(self, hg_id:int = 0,hg_type:str = None):
+    #     """
+    #     Initialize an host group
+    #
+    #     Args:
+    #         hd_id (int, optional): _description_. Defaults to 0.
+    #         hg_type (str, optional): _description_. Defaults to "r".
+    #
+    #     Returns:
+    #         Hostgroup: Return an Hostgroup with minimal setup
+    #     """
+    #     hg = Hostgroup(hg_id, hg_type)
+    #     return hg
 
     def check_hostgroup_exist(self, hg_id:int = 0):
         """
@@ -128,9 +122,8 @@ class Hostgroup:
        o offline = hg maontenance IE 9000 + hg_id
     
     """
-    def __init__(self,hg_id:int=0,nodes:dict={}):
+    def __init__(self,hg_id:int=0, hg_type:str = "r"):
         self.hg_id = hg_id
-        self.nodes:dict = nodes
         self.is_writer = False
         self.is_reader = False
         self.is_catalog = False
@@ -139,27 +132,41 @@ class Hostgroup:
         self.max_writers = 1 
         self.is_writer_is_also_reader = False
 
+        match hg_type:
+            case "w":
+                self.is_writer = True
+            case "r":
+                self.is_reader = True
+            case "c":
+                self.is_catalog = True
+            case "o":
+                self.is_offline = True
+            case _:
+                pass
 
 
-class Proxy_mysql_data_node:
+class ProxyMysqlDataNode(PXCNode):
    """
    This class extends MySQL_Node and represent a MySQL server inside ProxySQL
    Unique identifier:
     IP:PORT:HG 
    """ 
-   def __init__(self,uri=False):
-        super().__init__(uri)
-        self.hostgroup_id:int =0
-        self.hostname:str =""
-        self.port:int = 0
-        gtid_port:int = 0
-        status:str = ""
-        weight:int = 1000
-        compression:bool = False
-        max_connections:int = 2000
-        max_replication_lag:int = 0
-        use_ssl:int = 1
-        max_latency_ms:int =  0
-        comment:str =""
+   def __init__(self, node:PXCNode, hgid=0, hgtype:str = "r"):
+        # super().__init__(uri)
+        if node is None or not node.super.session.is_connected():
+            raise ValueError("Node cannot be None, or not connected to the MySQL server")
+
+        self.hostgroup:Hostgroup = Hostgroup(hgid,hgtype)
+        self.hostname:str = node.super.ip
+        self.port:int = node.super.port
+        self.gtid_port:int = 0
+        self.status:str = ""
+        self.weight:int = 1000
+        self.compression:bool = False
+        self.max_connections:int = 2000
+        self.max_replication_lag:int = 0
+        self.use_ssl:int = 1
+        self.max_latency_ms:int =  0
+        self.comment:str =""
    
    

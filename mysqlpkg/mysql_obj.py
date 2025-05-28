@@ -12,7 +12,7 @@ import common.dbtools as dbtools
 importlib.reload(dbtools)
 
 
-class Mysql_Node:
+class MysqlNode:
     """
     Mysql_Node class
     
@@ -103,7 +103,7 @@ class Mysql_Node:
         
         if self.session is not None:
             try:
-                if "ProxySQL_Node" in type(self).__name__:
+                if "ProxySQLNode" in type(self).__name__:
                     self.variables = dbtools.get_variables(self.session,"",False)
                     print("Connected to data node %s" % (self.ip +":" + str(self.port)))
                 else:    

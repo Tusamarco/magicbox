@@ -23,9 +23,9 @@ try:
 except:
     pass
 
-from pxcpkg.pxc_obj import PXC_Node
-from pxcpkg.pxc_obj import PXC_Cluster
-from proxysqlpkg.proxysql_obj import ProxySQL_Node
+from pxcpkg.pxc_obj import PXCNode
+from pxcpkg.pxc_obj import PXCCluster
+from proxysqlpkg.proxysql_obj import ProxySQLNode
 import common.dbtools as dbtools
 
 importlib.reload(pxc_obj)
@@ -46,13 +46,13 @@ class Pxc_processor:
         self.user = None
         self.ip = None
         self.port = None
-        self.members: Dict[str,PXC_Node]
+        self.members: Dict[str,PXCNode]
         self.version = None
         self.use_ssl = 0
         self.uri = uri
-        self.main_node = PXC_Node(uri)
-        self.cluster:PXC_Cluster = None
-        self.proxysql_node:ProxySQL_Node = None
+        self.main_node = PXCNode(uri)
+        self.cluster:PXCCluster = None
+        self.proxysql_node:ProxySQLNode = None
 
     def set_pxc_cluster(self,uri=None):
         """
@@ -93,7 +93,7 @@ class Pxc_processor:
                         
                     self.__init__(self.uri)
                 
-            self.cluster = PXC_Cluster(self.main_node)
+            self.cluster = PXCCluster(self.main_node)
             return self.get_pxc_cluster()
         else:
             print("Cluster " + self.cluster.name + " is already define and filled, if you want to modify it use refreshPxcCluster method")
@@ -155,11 +155,15 @@ class Pxc_processor:
             or None if invalid uri
         """
         if dbtools.validate_uri(uri):
-            self.proxysql_node = ProxySQL_Node(uri)
+            self.proxysql_node = ProxySQLNode(uri)
             return self.get_proxysql_node()
         else:
             print("Invalid uri: " + uri)
             return None
+
+        '''TODO
+        If the node has nodes in the proxysql_server then we should bild the ProxySQL cluster object and fill it  
+        '''
                            
     def get_proxysql_node(self):
         """

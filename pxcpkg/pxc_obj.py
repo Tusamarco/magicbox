@@ -2,15 +2,18 @@
 import time
 import sys
 import importlib
+from logging import exception
 
 from typing import Dict
 
+from scipy.stats import false_discovery_control
+
 from common import utils_mb
 import common.dbtools as dbtools
-from mysqlpkg.mysql_obj import Mysql_Node # mysqlpkg.mysql_obj import Mysql_Node
+from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node
 
 
-class PXC_Node(Mysql_Node):
+class PXCNode(MysqlNode):
     """
     PXC_Node
     
@@ -57,18 +60,18 @@ class PXC_Node(Mysql_Node):
             return True
         return False
     
-class PXC_Cluster():
-    from proxysqlpkg.proxysql_obj import ProxySQL_Node
+class PXCCluster():
+    from proxysqlpkg.proxysql_obj import ProxySQLNode
     """
     PXC_Cluster 
     
     PXC_Cluster, represent the cluster and provide information about it and methods to manage it 
     
     """
-    def __init__(self, pxc_node:PXC_Node):
+    def __init__(self, pxc_node:PXCNode):
         self.main_node = pxc_node
         self.name:str 
-        self.nodes:Dict[str,PXC_Node] = dict()
+        self.nodes:Dict[str,PXCNode] = dict()
         self.is_primary:bool = False
         
         if pxc_node.cluster_name is not None and len(pxc_node.cluster_name) > 0:
@@ -150,7 +153,7 @@ class PXC_Cluster():
                     
                 _uri = self.main_node.user + ":" + self.main_node.password + "@" + _reachable_ip + ":" + _port
      
-                _node = PXC_Node(_uri)
+                _node = PXCNode(_uri)
                 
                 """
                 If node is valid we will add to the cluster plus will do some check and settings
@@ -185,20 +188,21 @@ class PXC_Cluster():
             int: length of the nodes
         """
         if self.nodes is not None:
-            return len(self.nodes)            
+            return len(self.nodes)
+        return 0
 
-    def add_nodes_to_proxysql(self, proxy_node:ProxySQL_Node):
+    def add_nodes_to_proxysql(self,proxy_node:ProxySQLNode, hgid:int = 0):
         """
-        1) build ProxySQL node object
+        Done 1) build ProxySQL node object
         2) verify if servers inside Proxy already exists 
         3) we need to create 2 different set of HG Main hg 100-101 for w-r and 8000 for configuration 
             - verify if hgs already exists 
                 - if exists verify if any node inside hgs are the same
                 - if not, it means this is a different cluster and we need to build a different one.
-                    - change HGs ids and check ... untill we found a good set
+                    - change HGs ids and check ... until we found a good set
                 - if is the same then no need to add again the nodes
             - create new hgs (by adding the servers)
-                - look for Main node and identify which is the corrispondent node in Nodes
+                - look for Main node and identify which is the correspondent node in Nodes
                     make it primary true 
                 - for each node in nodes:
                     - if primary add it to 100/101 and set weight 1000
@@ -212,6 +216,24 @@ class PXC_Cluster():
             - add query rules For 100/101 linked to username. (I am not sure but this is to be consistent with that shit of proxysql-admin)
 
         """
+        if proxy_node is None or not proxy_node.session.is_connected():
+            return Exception("Proxy node cannot be None, or not connected to the ProxySQL server")
+        if len(self) == 0:
+            return exception(msg="Nothing to add cluster is empty")
+
+        # 2) Check if nodes are already assigned to any hostgroup in this specific case when adding a full cluster we should not have the nodes in already.
+        for node in self.nodes.values():
+            ip = node.ip
+            port = node.port
+            it_exists = False
+            sql = f"select hostgroup_id, hostname, port, status from mysql_servers where hostname='{ip}' and port={port}"
+            cursor = proxy_node.session.cursor(dictionary=False)
+            cursor.execute(sql)
+            mysql_servers = cursor.fetchall()
+            for server in mysql_servers:
+                if server["hostname"] == ip and server["port"] == port:
+                   print(f"Node {ip}:{port} already exists in hostgroup {server["hostgroup_id"]}.\n you need to manually cleanup or force the operation")
+
         return True
 
 class Pxc_Exception(Exception):

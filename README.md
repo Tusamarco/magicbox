@@ -1,9 +1,17 @@
 # What is this?
 
 
-## when using without MySQL shell
-from magicbox import MagicC
+## modules
+pip install mysql-connector-python
 
+
+## when using without MySQL shell
+1) Open Python console
+2) Import the magicbox top class (that simulate the plugin call in shell)
+    ``` python 
+   from magicbox import MagicC
+   ```
+3) use MagicC instead magicbox in the following commands
 ## Commands
 
 create initial processor:
