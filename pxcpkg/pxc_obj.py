@@ -46,9 +46,7 @@ class PXCNode(MysqlNode):
         except:
             # sys.tracebacklimit = 1
             raise KeyError("Wrong Key name or wrong resource parsed variables: wsrep_node_incoming_address")
-                                                                      
-        
-        
+
     def parse_provider(self):
         if self.variables is not None \
             and len(self.variables) > 0:
@@ -68,7 +66,7 @@ class PXCCluster():
     PXC_Cluster, represent the cluster and provide information about it and methods to manage it 
     
     """
-    def __init__(self, pxc_node:PXCNode):
+    def __init__(self, pxc_node:PXCNode,addresses:list[str]=None):
         self.main_node = pxc_node
         self.name:str 
         self.nodes:Dict[str,PXCNode] = dict()
@@ -76,13 +74,13 @@ class PXCCluster():
         
         if pxc_node.cluster_name is not None and len(pxc_node.cluster_name) > 0:
             self.name:str = pxc_node.cluster_name
-            self._fill_cluster()
+            self._fill_cluster(addresses)
             
         else:
             raise Pxc_Exception("Invalid Cluster name in PXC_node")
         
     
-    def _fill_cluster(self):
+    def _fill_cluster(self,addresses:list[str]=None):
         """
         This method will read the main_node to identify the other nodes in the cluster
         to discover which nodes it will use the wsrep_incoming_addresseses and assign it to pxc_ip/port
@@ -112,8 +110,11 @@ class PXCCluster():
             raise Exception("Cluster is not in Primary state cannot proceed")
         else:
             self.is_primary = True
+        if addresses is None:
+            _addresses = self.main_node.get_status_value("wsrep_incoming_addresses").split(",")
+        else:
+            _addresses = addresses
 
-        _addresses = self.main_node.get_status_value("wsrep_incoming_addresses").split(",")
         if _addresses is not None and len(_addresses) > 0: 
             for address in _addresses:
                 _ip = ""
@@ -126,7 +127,6 @@ class PXCCluster():
                 # Split each address into ip port 
                 if ':' in address:
                     _ip, _port = address.split(':', 1)  # Split on first ':' only
-                    
                 else:
                     # Handle cases where there's no ':' (treat the lack of port as default 3306)
                     _ip = address.strip()
@@ -143,16 +143,15 @@ class PXCCluster():
                 while not check["valid"]:
                     message = """
     Unreachable Host by wsrep_incoming_addresses """ + _ip + """. Invalid IP or hostname.
-    Hostname or IP do not resolve. Current pxc node accessible ip:""" + self.main_node.ip +"""
+    Hostname or IP does not resolve. Current pxc node accessible ip:""" + self.main_node.ip +"""
     Type Q to exit
     Or insert a reachable ip for the given PXC node:"""
                     _reachable_ip = dbtools.ask_shell_for_value(message)
                     if _reachable_ip == "Q":
                         break
                     check = utils_mb.validate_and_check_connection(_reachable_ip,_port,3)
-                    
+
                 _uri = self.main_node.user + ":" + self.main_node.password + "@" + _reachable_ip + ":" + _port
-     
                 _node = PXCNode(_uri)
                 
                 """
@@ -220,27 +219,28 @@ class PXCCluster():
             return Exception("Proxy node cannot be None, or not connected to the ProxySQL server")
         if len(self) == 0:
             return exception(msg="Nothing to add cluster is empty")
-
         # 2) Check if nodes are already assigned to any hostgroup in this specific case when adding a full cluster we should not have the nodes in already.
-        for node in self.nodes.values():
-            ip = node.ip
-            port = node.port
+        # 3.1) check if the hostgroup id given is present or not. If present and not force then we raise the message also informing the servers in
+        #      if force we will remove the hostgroup and all the nodes in it (also all the nodes in related HGs such as 8000 and 9000)
+        sql = (f"select hostgroup_id, hostname, port, status from mysql_servers where hostgroup_id={hgid} or hostgroup_id={hgid + 1}" +
+               f" or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
+        cursor = proxy_node.session.cursor(dictionary=True)
+        cursor.execute(sql)
+        mysql_servers = cursor.fetchall()      
+        already_present = []          
+        for server in mysql_servers:
             it_exists = False
-            sql = f"select hostgroup_id, hostname, port, status from mysql_servers where hostname='{ip}' and port={port}"
-            cursor = proxy_node.session.cursor(dictionary=True)
-            cursor.execute(sql)
-            mysql_servers = cursor.fetchall()
-            for server in mysql_servers:
-                if server["hostname"] == ip and server["port"] == str(port) and not force:
-                   print(f"Node {ip}:{port} already exists in hostgroup {server["hostgroup_id"]}. You need to manually cleanup or force the operation")
-                elif server["hostname"] == ip and server["port"] == str(port) and force:
-                   # We remove the node but will not push it to runtime or save to disk we will wait for all then apply
-                   print(
-                    f"[WARNING] Node {ip}:{port} already exists in hostgroup {server["hostgroup_id"]}. Given force option we will remove the existing one")
-                   sql = f"delete from mysql_servers where hostname='{ip}' and port={port}"
-                   cursor.execute(sql)
-            # 3.1) check if the hostgroup id given is present or not. If present and not force then we raise the message also informing the servers in
-            #      if force we will remove the hostgroup and all the nodes in it (also all the nodes in related HGs such as 8000 and 9000)
+            for node in self.nodes.values():
+                if node.ip == server["hostname"] and str(node.port) == server["port"]:
+                    already_present.append(f"Node {node.ip} Port: {node.port} hostgroup_id: {server['hostgroup_id']}")
+                    break
+            
+        if len(already_present) > 0:
+            print(f"[WARNING] The following nodes are already present in the HostGroup id: {hgid} and related hostgroup_id={hgid + 1} " +
+                  f"or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
+            for node_str in already_present:
+                    print(node_str)
+
         return True
 
 class Pxc_Exception(Exception):

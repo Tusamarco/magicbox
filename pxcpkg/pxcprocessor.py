@@ -54,7 +54,7 @@ class Pxc_processor:
         self.cluster:PXCCluster = None
         self.proxysql_node:ProxySQLNode = None
 
-    def set_pxc_cluster(self,uri=None):
+    def set_pxc_cluster(self,uri=None,addresses:list[str]=None):
         """
         This method will read the main_node to identify the other nodes in the cluster
         
@@ -93,7 +93,7 @@ class Pxc_processor:
                         
                     self.__init__(self.uri)
                 
-            self.cluster = PXCCluster(self.main_node)
+            self.cluster = PXCCluster(self.main_node,addresses)
             return self.get_pxc_cluster()
         else:
             print("Cluster " + self.cluster.name + " is already define and filled, if you want to modify it use refreshPxcCluster method")
