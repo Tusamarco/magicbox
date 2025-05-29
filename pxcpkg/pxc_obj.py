@@ -191,7 +191,7 @@ class PXCCluster():
             return len(self.nodes)
         return 0
 
-    def add_nodes_to_proxysql(self,proxy_node:ProxySQLNode, hgid:int = 0):
+    def add_nodes_to_proxysql(self,proxy_node:ProxySQLNode, hgid:int = 0,force:bool=False):
         """
         Done 1) build ProxySQL node object
         2) verify if servers inside Proxy already exists 
@@ -231,9 +231,16 @@ class PXCCluster():
             cursor.execute(sql)
             mysql_servers = cursor.fetchall()
             for server in mysql_servers:
-                if server["hostname"] == ip and server["port"] == str(port):
+                if server["hostname"] == ip and server["port"] == str(port) and not force:
                    print(f"Node {ip}:{port} already exists in hostgroup {server["hostgroup_id"]}. You need to manually cleanup or force the operation")
-
+                elif server["hostname"] == ip and server["port"] == str(port) and force:
+                   # We remove the node but will not push it to runtime or save to disk we will wait for all then apply
+                   print(
+                    f"[WARNING] Node {ip}:{port} already exists in hostgroup {server["hostgroup_id"]}. Given force option we will remove the existing one")
+                   sql = f"delete from mysql_servers where hostname='{ip}' and port={port}"
+                   cursor.execute(sql)
+            # 3.1) check if the hostgroup id given is present or not. If present and not force then we raise the message also informing the servers in
+            #      if force we will remove the hostgroup and all the nodes in it (also all the nodes in related HGs such as 8000 and 9000)
         return True
 
 class Pxc_Exception(Exception):
