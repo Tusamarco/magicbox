@@ -7,6 +7,7 @@ import ipaddress
 import socket
 import re
 import sys
+from ftplib import print_line
 from ipaddress import ip_address
 import os
 from pathlib import Path
@@ -365,3 +366,17 @@ def hidden_input(prompt:str = "Password"):
     except subprocess.CalledProcessError:
         print("Error executing stty echo")
         sys.exit(1)
+
+def print_separator(pchar:str="#",start:str="",end:str=""):
+    """
+    Simple function that prints a separator with given char and optional Head and Tail
+    Args:
+        pchar: the separator character defaulr "#"
+        start/end: any string such as "[INFO]"
+
+    Returns:
+        string
+
+    """
+    text = pchar
+    return start + text.ljust(50,pchar) + end

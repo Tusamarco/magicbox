@@ -12,6 +12,16 @@ class MagicC:
 
     The magicbox Class is going to bring you joy and candies
     """
+    import logging
+
+    # Configure basic logging (console output)
+    logging.basicConfig(
+        level=logging.INFO,  # Minimum level to log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        # format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
+        format='%(levelname)s - %(message)s',  # Log format
+        handlers=[logging.StreamHandler()]  # Log to console
+    )
+
     def __init__(self):
         print("magicbox")
         # return  self
@@ -43,6 +53,6 @@ class MagicC:
         processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
         cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
         proxy = processor.set_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
-        cluster.add_nodes_to_proxysql(processor.get_proxysql_node(),100)
+        cluster.add_nodes_to_proxysql(processor.get_proxysql_node(),100,True)
         cluster.close_connections()
         processor.close_connections()

@@ -2,6 +2,7 @@
 import time
 import sys
 import importlib
+from ftplib import print_line
 from logging import exception
 
 from typing import Dict
@@ -12,6 +13,7 @@ from common import utils_mb
 import common.dbtools as dbtools
 from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node
 
+import logging
 
 class PXCNode(MysqlNode):
     """
@@ -222,26 +224,77 @@ class PXCCluster():
         # 2) Check if nodes are already assigned to any hostgroup in this specific case when adding a full cluster we should not have the nodes in already.
         # 3.1) check if the hostgroup id given is present or not. If present and not force then we raise the message also informing the servers in
         #      if force we will remove the hostgroup and all the nodes in it (also all the nodes in related HGs such as 8000 and 9000)
-        sql = (f"select hostgroup_id, hostname, port, status from mysql_servers where hostgroup_id={hgid} or hostgroup_id={hgid + 1}" +
-               f" or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
+
+        if self._check_pxc_nodes_in_proxysql(proxy_node, hgid=hgid, force=force):
+            # We have node if force is in place we will delete them otherwise will not continue
+            if force:
+                #delete all
+                print("Delete all nodes")
+                print("Add all nodes")
+                pass
+            else:
+                print("Exit")
+                exit(1)
+        else:
+            # No node is present we can add without problem
+            print("Add cluster starts")
+            pass
+
+    def _check_pxc_nodes_in_proxysql(self,proxy_node:ProxySQLNode = None,hgid:int=0,force:bool=False):
+        """
+        Internal method to check if a cluster has already been created and has dependencies
+        Args:
+            proxy_node:
+            hgid:
+            force:
+
+        Returns:
+            bool True if a cluster already exists; False otherwise
+
+        """
+        sql = (
+                    f"select hostgroup_id, hostname, port, status from mysql_servers where hostgroup_id={hgid} or hostgroup_id={hgid + 1}" +
+                    f" or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
         cursor = proxy_node.session.cursor(dictionary=True)
         cursor.execute(sql)
-        mysql_servers = cursor.fetchall()      
-        already_present = []          
+        mysql_servers = cursor.fetchall()
+        already_present = []
         for server in mysql_servers:
             it_exists = False
             for node in self.nodes.values():
                 if node.ip == server["hostname"] and str(node.port) == server["port"]:
                     already_present.append(f"Node {node.ip} Port: {node.port} hostgroup_id: {server['hostgroup_id']}")
                     break
-            
-        if len(already_present) > 0:
-            print(f"[WARNING] The following nodes are already present in the HostGroup id: {hgid} and related hostgroup_id={hgid + 1} " +
-                  f"or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
-            for node_str in already_present:
-                    print(node_str)
 
-        return True
+        if len(already_present) > 0:
+            logging.warning(utils_mb.print_separator("#", ""))
+            # print_line(utils_mb.print_separator("#", "[WARNING]"))
+            # print(
+            logging.warning(
+                f"The following nodes are already present in the HostGroup id: {hgid} and related hostgroup_id={hgid + 1} " +
+                f"or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
+
+            for node_str in already_present:
+                # print(
+                logging.warning(node_str)
+
+            print_line(utils_mb.print_separator("-"))
+            if not force:
+                # print(
+                logging.warning(f"To automatically remove all related servers use option 'force=True'.\n" +
+                      f"Or run delete_pxc_cluster_from_proxysql(hgid={hgid}).\n" +
+                      "Or clean all related servers manually then rerun add_nodes_to_proxysql()")
+            else:
+                # print(
+                logging.warning("Forcing is in place all the above nodes will be removed")
+
+            # print_line(
+            logging.warning(utils_mb.print_separator("#"))
+            return True
+        else:
+
+            return False
+
 
 class Pxc_Exception(Exception):
     pass
