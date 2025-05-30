@@ -3,7 +3,7 @@
 
 ## modules
 pip install mysql-connector-python
-
+pip install scipy
 
 ## when using without MySQL shell
 1) Open Python console
