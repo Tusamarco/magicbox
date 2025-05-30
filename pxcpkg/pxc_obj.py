@@ -167,7 +167,7 @@ class PXCCluster():
             
             # print(len(self.nodes))
         
-    def close_all(self):
+    def close_connections(self):
         """
         If object contains nodes then we loop, close connection to target
         remove from dict 

@@ -176,3 +176,13 @@ class Pxc_processor:
             return None
         else:
             return self.proxysql_node
+
+    def close_connections(self):
+        """
+        Close the connection for the instantiated db objects
+        Returns: Void
+        """
+        if self.proxysql_node is not None:
+            self.proxysql_node.close_connection()
+        if self.main_node is not None:
+            self.main_node.close_connection()

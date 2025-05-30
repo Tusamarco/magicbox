@@ -170,5 +170,5 @@ class MysqlNode:
         return self.status[key]   
     
     def close_connection(self):
-        if self.session is not None:
+        if self.session is not None and self.session.is_connected():
             dbtools.close_mysql_python_connection(self.session)
