@@ -10,7 +10,7 @@ from typing import Dict
 
 import common.dbtools as dbtools
 importlib.reload(dbtools)
-
+import logging
 
 class MysqlNode:
     """
@@ -105,11 +105,13 @@ class MysqlNode:
             try:
                 if "ProxySQLNode" in type(self).__name__:
                     self.variables = dbtools.get_variables(self.session,"",False)
-                    print("Connected to data node %s" % (self.ip +":" + str(self.port)))
+                    # print(
+                    logging.info("Connected to data node %s" % (self.ip +":" + str(self.port)))
                 else:    
                     self.variables = dbtools.get_variables(self.session,"")
                     self.status = dbtools.get_status(self.session,"")                
-                    print("Connected to data node %s (%s - %s) " % (self.variables["hostname"],self.variables["version"],self.variables["version_comment"]))
+                    # print(
+                    logging.info("Connected to data node %s (%s - %s) " % (self.variables["hostname"],self.variables["version"],self.variables["version_comment"]))
                 '''
                  TODO
                  to find a common way to close the connection to the db at the end of the operation

@@ -2,6 +2,7 @@
     Set of functionalities that allow to connect to a data base 
     Also some most commonly used operations
 """
+import logging
 import re
 import ipaddress
 from urllib.parse import urlparse
@@ -204,7 +205,7 @@ def get_variables(connection,filter,is_global=True):
             cursor = connection.cursor(dictionary=False)
             if filter != "":
                 sql = sql + " " + " like '{}'".format(filter)
-                print(sql)
+                logging.debug(sql)
             cursor.execute(sql)
             rows = cursor.fetchall()
             variables = {str(row[0]): str(row[1]) for row in rows}
@@ -244,7 +245,7 @@ def get_status(connection,filter,is_global=True):
             cursor = connection.cursor(dictionary=False)
             if filter != "":
                 sql = sql + " " + " like '{}'".format(filter)
-                print(sql)
+                logging.debug(sql)
             cursor.execute(sql)
             rows = cursor.fetchall()
             variables = {str(row[0]): str(row[1]) for row in rows}

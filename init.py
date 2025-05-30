@@ -15,9 +15,9 @@ import logging
 
 # Configure basic logging (console output)
 logging.basicConfig(
-    level=logging.INFO,  # Minimum level to log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    level=logging.WARNING,  # Minimum level to log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     # format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
-    format='%(levelname)s - %(message)s',  # Log format
+    format='[%(levelname)s] - %(message)s',  # Log format
     handlers=[logging.StreamHandler()]  # Log to console
 )
 

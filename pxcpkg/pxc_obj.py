@@ -229,15 +229,15 @@ class PXCCluster():
             # We have node if force is in place we will delete them otherwise will not continue
             if force:
                 #delete all
-                print("Delete all nodes")
-                print("Add all nodes")
+                logging.debug("Delete all nodes")
+                logging.debug("Add all nodes")
                 pass
             else:
-                print("Exit")
+                logging.debug("Exit")
                 exit(1)
         else:
             # No node is present we can add without problem
-            print("Add cluster starts")
+            logging.debug("Add cluster starts")
             pass
 
     def _check_pxc_nodes_in_proxysql(self,proxy_node:ProxySQLNode = None,hgid:int=0,force:bool=False):
@@ -278,7 +278,7 @@ class PXCCluster():
                 # print(
                 logging.warning(node_str)
 
-            print_line(utils_mb.print_separator("-"))
+            logging.warning(utils_mb.print_separator("-"))
             if not force:
                 # print(
                 logging.warning(f"To automatically remove all related servers use option 'force=True'.\n" +

@@ -5,6 +5,30 @@
 pip install mysql-connector-python
 pip install scipy
 
+
+## Logger
+We use logging to print out messages on the console.
+During the execution by defaul the log level is WARNING
+But we can easily change it doing:
+
+```python
+import logging
+logging.getLogger().setLevel(logging.INFO)
+```
+To modify the format on the fly in the code :
+```python
+originalhan = logging.getLogger().handlers[0]
+modahnd = logging.StreamHandler()
+modahnd.setFormatter(logging.Formatter("%(message)s"))
+logging.getLogger().handlers[0]=modahnd
+
+# To put bacj the original
+logging.getLogger().handlers[0]=originalhan
+```
+
+to see what levels are supported: 
+https://docs.python.org/3.13/library/logging.html#logging-levels
+
 ## when using without MySQL shell
 1) Open Python console
 2) Import the magicbox top class (that simulate the plugin call in shell)

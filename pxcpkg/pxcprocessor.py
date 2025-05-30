@@ -7,7 +7,7 @@ Classes:
  - PXC_cluster
  - Pxc_processor
 """
-
+import logging
 # import mysqlsh
 import time
 import sys
@@ -84,7 +84,7 @@ class Pxc_processor:
                     self.main_node.close_connection
                     self.main_node = None
                 else:
-                    print("The uri does not resolve correctly or is empty. Will use the Main Node one: " +self.uri)
+                    logging.warning("The uri does not resolve correctly or is empty. Will use the Main Node one: " +self.uri)
             finally:
                 if dbtools.validate_uri(self.uri):
                     if self.main_node is not None:
@@ -96,7 +96,7 @@ class Pxc_processor:
             self.cluster = PXCCluster(self.main_node,addresses)
             return self.get_pxc_cluster()
         else:
-            print("Cluster " + self.cluster.name + " is already define and filled, if you want to modify it use refreshPxcCluster method")
+            logging.warning("Cluster " + self.cluster.name + " is already define and filled, if you want to modify it use refreshPxcCluster method")
             return self.get_pxc_cluster()
         
                            
@@ -129,9 +129,9 @@ class Pxc_processor:
             return self.set_pxc_cluster(uri)
         else:
             if self.cluster is None:
-                print("Cluster not initialized, nothing to refresh, use processor.setPXCcluster() first")
+                logging.warning("Cluster not initialized, nothing to refresh, use processor.setPXCcluster() first")
             else:    
-                print(self.cluster.name +" has no nodes, nothing to refresh")
+                logging.warning(self.cluster.name +" has no nodes, nothing to refresh")
 
     def set_proxysql_node(self,uri=None):
         """
@@ -158,7 +158,7 @@ class Pxc_processor:
             self.proxysql_node = ProxySQLNode(uri)
             return self.get_proxysql_node()
         else:
-            print("Invalid uri: " + uri)
+            logging.warning("Invalid uri: " + uri)
             return None
 
         '''TODO
