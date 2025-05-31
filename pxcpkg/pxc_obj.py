@@ -7,8 +7,6 @@ from logging import exception
 
 from typing import Dict
 
-from scipy.stats import false_discovery_control
-
 from common import utils_mb
 import common.dbtools as dbtools
 from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node
@@ -50,18 +48,23 @@ class PXCNode(MysqlNode):
             raise KeyError("Wrong Key name or wrong resource parsed variables: wsrep_node_incoming_address")
 
     def parse_provider(self):
+        self.refresh_variables()
         if self.variables is not None \
             and len(self.variables) > 0:
                 self.wsrep_provider = utils_mb.parse_label_value_pairs(self.variables["wsrep_provider_options"], ";")
 #                print(self.wsrep_provider)
 
     def cluster_is_primary(self):
+        self.refresh_status()
         if self.status["wsrep_cluster_status"] == "Primary":
             return True
         return False
-    
+
+
+
 class PXCCluster():
     from proxysqlpkg.proxysql_obj import ProxySQLNode
+    from proxysqlpkg.proxysql_obj import ServerId, ProxyMysqlDataNode
     """
     PXC_Cluster 
     
@@ -225,7 +228,11 @@ class PXCCluster():
         # 3.1) check if the hostgroup id given is present or not. If present and not force then we raise the message also informing the servers in
         #      if force we will remove the hostgroup and all the nodes in it (also all the nodes in related HGs such as 8000 and 9000)
 
-        if self._check_pxc_nodes_in_proxysql(proxy_node, hgid=hgid, force=force):
+        # Before running any check, we convert the PXC nodes into ProxySQL Backend servers
+
+        _proxysql_backend = self._configure_pxc_backend_nodes(hgid)
+
+        if proxy_node.check_nodes_if_existing(_proxysql_backend,hgid,force):
             # We have node if force is in place we will delete them otherwise will not continue
             if force:
                 #delete all
@@ -240,60 +247,43 @@ class PXCCluster():
             logging.debug("Add cluster starts")
             pass
 
-    def _check_pxc_nodes_in_proxysql(self,proxy_node:ProxySQLNode = None,hgid:int=0,force:bool=False):
+    def _configure_pxc_backend_nodes(self,hgid:int = 0):
         """
-        Internal method to check if a cluster has already been created and has dependencies
-        Args:
-            proxy_node:
-            hgid:
-            force:
+        This internal method has the logic to configure the PXC backend nodes following the rules:
+        - we have 4 Hostgroups:
+            Write
+            Read
+            Catalog Write
+            Catalog Read
+        - Node matching Is_main_node is the Preferred Primary
+        - If single writer 
+            Preferred writer will have higher weight (1000) and the others will have last_weight_value -1
+            Only Preferred writer will be assigned to the active Write HG (ie 100) but all nodes will be assign to configuration nodes 8000 + hgid
+        - If multiple writers
+            All the nodes will have weight 1000 all nodes will be assigned to configuration group
 
         Returns:
-            bool True if a cluster already exists; False otherwise
 
         """
-        sql = (
-                    f"select hostgroup_id, hostname, port, status from mysql_servers where hostgroup_id={hgid} or hostgroup_id={hgid + 1}" +
-                    f" or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
-        cursor = proxy_node.session.cursor(dictionary=True)
-        cursor.execute(sql)
-        mysql_servers = cursor.fetchall()
-        already_present = []
-        for server in mysql_servers:
-            it_exists = False
-            for node in self.nodes.values():
-                if node.ip == server["hostname"] and str(node.port) == server["port"]:
-                    already_present.append(f"Node {node.ip} Port: {node.port} hostgroup_id: {server['hostgroup_id']}")
-                    break
+        from proxysqlpkg.proxysql_obj import ProxyMysqlDataNode, ServerId
 
-        if len(already_present) > 0:
-            logging.warning(utils_mb.print_separator("#", ""))
-            # print_line(utils_mb.print_separator("#", "[WARNING]"))
-            # print(
-            logging.warning(
-                f"The following nodes are already present in the HostGroup id: {hgid} and related hostgroup_id={hgid + 1} " +
-                f"or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
+        _proxysql_backend:Dict[ServerId,ProxyMysqlDataNode] = {}
+        for _node in self.nodes.values():
+            _p_node_bkend_w = ProxyMysqlDataNode(_node, hgid, "w")
+            _p_node_bkend_r = ProxyMysqlDataNode(_node, hgid + 1, "r")
+            _p_node_bkend_cw = ProxyMysqlDataNode(_node, hgid + 8000, "c")
+            _p_node_bkend_cr = ProxyMysqlDataNode(_node, hgid + 8001, "c")
+            _proxysql_backend[_p_node_bkend_w.id] = _p_node_bkend_w
+            _proxysql_backend[_p_node_bkend_r.id] = _p_node_bkend_r
+            _proxysql_backend[_p_node_bkend_cw.id] = _p_node_bkend_cw
+            _proxysql_backend[_p_node_bkend_cr.id] = _p_node_bkend_cr
 
-            for node_str in already_present:
-                # print(
-                logging.warning(node_str)
+        return _proxysql_backend
 
-            logging.warning(utils_mb.print_separator("-"))
-            if not force:
-                # print(
-                logging.warning(f"To automatically remove all related servers use option 'force=True'.\n" +
-                      f"Or run delete_pxc_cluster_from_proxysql(hgid={hgid}).\n" +
-                      "Or clean all related servers manually then rerun add_nodes_to_proxysql()")
-            else:
-                # print(
-                logging.warning("Forcing is in place all the above nodes will be removed")
+        # ///////////////////   WIP here
 
-            # print_line(
-            logging.warning(utils_mb.print_separator("#"))
-            return True
-        else:
 
-            return False
+
 
 
 class Pxc_Exception(Exception):

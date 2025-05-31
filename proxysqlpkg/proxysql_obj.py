@@ -1,15 +1,20 @@
 """
     ProxySQL object module defining all proxysql related class
 """
-
+import logging
 from typing import Dict
+
+from common import utils_mb
 from pxcpkg.pxc_obj import PXCNode
 from mysqlpkg.mysql_obj import MysqlNode
+import common.dbtools as dbtools
+
 
 class ServerId:
-    hg_id:int = 0
-    server_ip:str = ""
-    server_port:int = 0
+    def __init__(self,hgid:int = 0,ip:str = "", port:int = 0):
+        self.hg_id:int = int(hgid)
+        self.server_ip:str = ip
+        self.server_port:int = int(port)
 
 
 class ProxySQLCluster:
@@ -60,8 +65,35 @@ class ProxySQLNode(MysqlNode):
         self.comment        = ""
         # Config          *global.Configuration
         self.pingTimeout    = 0
-        
-    def check_nodes_if_existing(self, node_hostname:str = None, port:int = 0):
+        # Initialize the nodes existing
+        self._load_nodes()
+
+    def _load_nodes(self):
+        """
+        We load all the backend nodes for processing.
+        At this stage we do not care if they have a PXC node in the background or not
+        Returns:
+
+        """
+        sql = ("select * from mysql_servers")
+        cursor = self.session.cursor(dictionary=True)
+        cursor.execute(sql)
+        mysql_servers = cursor.fetchall()
+        for server in mysql_servers:
+            bkend_node = ProxyMysqlDataNode(None,server["hostgroup_id"],None,server["hostname"],server["port"])
+            bkend_node.gtid_port = server["gtid_port"]
+            bkend_node.status = server["status"]
+            bkend_node.weight = server["weight"]
+            bkend_node.compression = server["compression"]
+            bkend_node.max_connections = server["max_connections"]
+            bkend_node.max_replication_lag = server["max_replication_lag"]
+            bkend_node.use_ssl=server["use_ssl"]
+            bkend_node.max_latency_ms=server["max_latency_ms"]
+            bkend_node.comment = server["comment"]
+            self.mysql_nodes[bkend_node.id] = bkend_node
+
+
+    def check_nodes_if_existing(self, incoming_bck_nodes:dict[ServerId]={},hgid:int=0,force:bool=False ):
         """
         For each existing HG we check any nodes in the PXC cluster
         To identify if they already exists and if already assined to that HG
@@ -69,20 +101,59 @@ class ProxySQLNode(MysqlNode):
          nodename (hostname) : HG : PORT
 
         Args:
-            node_name (str, optional): the hostname . Defaults to None.
+            a dict [Hostgroup]ProxyMysqlDataNode instance
+            the Hostgroup originating ID
         
         Returns:
             true/false
             
         Flow:
             from the PXC cluster we loop all nodes and check if the nodes are already present
-            if already there then we may want to:
-                - raise an alert
-                - ask for what action
+
                             
         """
-        return False
-    
+        already_present = []
+        for server in self.mysql_nodes.keys():
+            # it_exists = False
+            for node in incoming_bck_nodes.keys():
+                if node.server_ip == server.server_ip and node.server_port == server.server_port and node.hg_id == server.hg_id:
+                    already_present.append(f"Node {node.server_ip} Port: {node.server_port} hostgroup_id: {node.hg_id}")
+
+                    # IF Force is True we flag the node in the Proxysql Server for deletion
+                    self.mysql_nodes[server].actionlist.append(ProxyMysqlDataNode.ACTION_DELETE)
+                    # At the same time we mark the node in the incoming list for INSERT
+                    incoming_bck_nodes[node].actionlist.append(ProxyMysqlDataNode.ACTION_INSERT)
+                    break
+
+        if len(already_present) > 0:
+            logging.warning(utils_mb.print_separator("#", ""))
+            # print_line(utils_mb.print_separator("#", "[WARNING]"))
+            # print(
+            logging.warning(
+                f"The following nodes are already present in the HostGroup id: {hgid} and related hostgroup_id={hgid + 1} " +
+                f"or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
+
+            for node_str in already_present:
+                # print(
+                logging.warning(node_str)
+
+            logging.warning(utils_mb.print_separator("-"))
+            if not force:
+                # print(
+                logging.warning(f"To automatically remove all related servers use option 'force=True'.\n" +
+                                f"Or run delete_pxc_cluster_from_proxysql(hgid={hgid}).\n" +
+                                "Or clean all related servers manually then rerun add_nodes_to_proxysql()")
+            else:
+                # print(
+                logging.warning("Forcing is in place all the above nodes will be removed")
+
+            # print_line(
+            logging.warning(utils_mb.print_separator("#"))
+            return True
+        else:
+
+            return False
+
     # def set_hostgroup(self, hg_id:int = 0,hg_type:str = None):
     #     """
     #     Initialize an host group
@@ -150,15 +221,24 @@ class ProxyMysqlDataNode(PXCNode):
    This class extends MySQL_Node and represent a MySQL server inside ProxySQL
    Unique identifier:
     IP:PORT:HG 
-   """ 
-   def __init__(self, node:PXCNode, hgid=0, hgtype:str = "r"):
+   """
+   ACTION_DELETE = "delete"
+   ACTION_UPDATE = "update"
+   ACTION_INSERT = "insert"
+   def __init__(self, node:PXCNode, hgid=0, hgtype:str = "r",ip:str = "",port:int = 0):
         # super().__init__(uri)
-        if node is None or not node.super.session.is_connected():
+        if (node is None or not node.session.is_connected()) and (ip == "" and port == 0):
             raise ValueError("Node cannot be None, or not connected to the MySQL server")
+        elif (node is not None and node.session.is_connected()) and (ip == "" and port == 0):
+            self.id:ServerId = ServerId(hgid=hgid, ip=node.ip, port=node.port)
+            self.hostname:str = node.ip
+            self.port:int = node.port
+        else:
+            self.id: ServerId = ServerId(hgid=hgid, ip=ip, port=port)
+            self.hostname:str = ip
+            self.port:int = port
 
         self.hostgroup:Hostgroup = Hostgroup(hgid,hgtype)
-        self.hostname:str = node.super.ip
-        self.port:int = node.super.port
         self.gtid_port:int = 0
         self.status:str = ""
         self.weight:int = 1000
@@ -168,5 +248,9 @@ class ProxyMysqlDataNode(PXCNode):
         self.use_ssl:int = 1
         self.max_latency_ms:int =  0
         self.comment:str =""
+        self.processed = False
+        self.actionlist = []
+
+
    
    

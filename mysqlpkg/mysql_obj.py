@@ -40,7 +40,6 @@ class MysqlNode:
         self.use_ssl = 0
         self.uri = uri
         self.session = None
-        self.processed    = False
         self.read_only     = False
         self.status:Dict[str,str]
         self.variables:Dict[str,str]
@@ -174,3 +173,17 @@ class MysqlNode:
     def close_connection(self):
         if self.session is not None and self.session.is_connected():
             dbtools.close_mysql_python_connection(self.session)
+
+    def refresh_status(self):
+        """
+        Method to refresh the status of the Data node
+        Returns: dict[str]value Status
+        """
+        self.status = dbtools.get_status(self.session,"")
+
+    def refresh_variables(self):
+        """
+        Method to refresh the variables of the Data node
+        Returns: dict[str]value variables
+        """
+        self.variables = dbtools.get_variables(self.session,"")
