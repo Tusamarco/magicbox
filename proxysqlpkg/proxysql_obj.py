@@ -70,9 +70,13 @@ class ProxySQLNode(MysqlNode):
 
     def _load_nodes(self):
         """
+        This is an action at __init__
         We load all the backend nodes for processing.
         At this stage we do not care if they have a PXC node in the background or not
-        Returns:
+        We also do not care if we load all the nodes and they are not relevant because we still do not know.
+        Once we have reconciled with the PXC cluster, then only the node currently available for that cluster will be part of the visible backend nodes
+
+        Returns: Void
 
         """
         sql = ("select * from mysql_servers")
