@@ -7,8 +7,6 @@ try:
 except:
     pass
 
-from pxcpkg  import pxcprocessor
-importlib.reload(pxcprocessor)
 
 
 import logging
