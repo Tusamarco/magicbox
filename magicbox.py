@@ -1,12 +1,9 @@
 import logging
 
-from pxcpkg import pxcprocessor
 
 import importlib
 
 from pxcpkg.pxc_obj import PXCCluster
-
-importlib.reload(pxcprocessor)
 
 class MagicC:
     """
@@ -51,10 +48,14 @@ class MagicC:
         #
         # }
 
+    @staticmethod
     def check_all():
-        processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
-        cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
-        proxy = processor.set_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
-        cluster.add_nodes_to_proxysql(processor.get_proxysql_node(),100,True)
+        # processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
+        cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@192.168.4.205:3306",["192.168.4.231","192.168.4.205","192.168.4.21"])
+        # cluster.discover_nodes(["192.168.4.231","192.168.4.205","192.168.4.21"])
+        # cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
+        cluster.connect_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
+        # proxy = processor.set_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
+        cluster.add_nodes_to_proxysql(100,True)
         cluster.close_connections()
-        processor.close_connections()
+        # processor.close_connections()

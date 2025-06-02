@@ -3,10 +3,9 @@
 """
 import logging
 from typing import Dict
-
 from common import utils_mb
-from pxcpkg.pxc_obj import PXCNode
 from mysqlpkg.mysql_obj import MysqlNode
+
 import common.dbtools as dbtools
 
 
@@ -15,6 +14,76 @@ class ServerId:
         self.hg_id:int = int(hgid)
         self.server_ip:str = ip
         self.server_port:int = int(port)
+
+
+class Hostgroup:
+    """
+    Class represent the Hosgroup object
+    Hostgroup types:
+       w writer = hg writer id IE 100
+       r reader = hg reader id IE 101
+       c catalog = hg unmutable setting IE 8000 + hg_id
+       o offline = hg maontenance IE 9000 + hg_id
+
+    """
+
+    def __init__(self, hg_id: int = 0, hg_type: str = "r"):
+        self.hg_id = hg_id
+        self.is_writer = False
+        self.is_reader = False
+        self.is_catalog = False
+        self.is_offline = False
+        self.is_active = False
+        self.max_writers = 1
+        self.is_writer_is_also_reader = False
+
+        match hg_type:
+            case "w":
+                self.is_writer = True
+            case "r":
+                self.is_reader = True
+            case "c":
+                self.is_catalog = True
+            case "o":
+                self.is_offline = True
+            case _:
+                pass
+
+
+class ProxyMysqlDataNode(MysqlNode):
+   """
+   This class extends PXC_NODE and represent a PXC server inside ProxySQL
+   Unique identifier:
+    IP:PORT:HG
+   """
+   ACTION_DELETE = "delete"
+   ACTION_UPDATE = "update"
+   ACTION_INSERT = "insert"
+   def __init__(self, node:MysqlNode, hgid=0, hgtype:str = "r",ip:str = "",port:int = 0):
+        # super().__init__(uri)
+        if (node is None or not node.session.is_connected()) and (ip == "" and port == 0):
+            raise ValueError("Node cannot be None, or not connected to the MySQL server")
+        elif (node is not None and node.session.is_connected()) and (ip == "" and port == 0):
+            self.id:ServerId = ServerId(hgid=hgid, ip=node.ip, port=node.port)
+            self.hostname:str = node.ip
+            self.port:int = node.port
+        else:
+            self.id: ServerId = ServerId(hgid=hgid, ip=ip, port=port)
+            self.hostname:str = ip
+            self.port:int = port
+
+        self.hostgroup:Hostgroup = Hostgroup(hgid,hgtype)
+        self.gtid_port:int = 0
+        self.status:str = ""
+        self.weight:int = 1000
+        self.compression:bool = False
+        self.max_connections:int = 2000
+        self.max_replication_lag:int = 0
+        self.use_ssl:int = 1
+        self.max_latency_ms:int =  0
+        self.comment:str =""
+        self.processed = False
+        self.action_list = []
 
 
 class ProxySQLCluster:
@@ -66,9 +135,9 @@ class ProxySQLNode(MysqlNode):
         # Config          *global.Configuration
         self.pingTimeout    = 0
         # Initialize the nodes existing
-        self._load_nodes()
+        self._load_back_end_nodes()
 
-    def _load_nodes(self):
+    def _load_back_end_nodes(self):
         """
         This is an action at __init__
         We load all the backend nodes for processing.
@@ -124,9 +193,9 @@ class ProxySQLNode(MysqlNode):
                     already_present.append(f"Node {node.server_ip} Port: {node.server_port} hostgroup_id: {node.hg_id}")
 
                     # IF Force is True we flag the node in the Proxysql Server for deletion
-                    self.mysql_nodes[server].actionlist.append(ProxyMysqlDataNode.ACTION_DELETE)
+                    self.mysql_nodes[server].action_list.append(ProxyMysqlDataNode.ACTION_DELETE)
                     # At the same time we mark the node in the incoming list for INSERT
-                    incoming_bck_nodes[node].actionlist.append(ProxyMysqlDataNode.ACTION_INSERT)
+                    incoming_bck_nodes[node].action_list.append(ProxyMysqlDataNode.ACTION_INSERT)
                     break
 
         if len(already_present) > 0:
@@ -187,73 +256,8 @@ class ProxySQLNode(MysqlNode):
         
         return False
         
-class Hostgroup:
-    """
-    Class represent the Hosgroup object
-    Hostgroup types:
-       w writer = hg writer id IE 100
-       r reader = hg reader id IE 101
-       c catalog = hg unmutable setting IE 8000 + hg_id
-       o offline = hg maontenance IE 9000 + hg_id
-    
-    """
-    def __init__(self,hg_id:int=0, hg_type:str = "r"):
-        self.hg_id = hg_id
-        self.is_writer = False
-        self.is_reader = False
-        self.is_catalog = False
-        self.is_offline = False
-        self.is_active = False
-        self.max_writers = 1 
-        self.is_writer_is_also_reader = False
-
-        match hg_type:
-            case "w":
-                self.is_writer = True
-            case "r":
-                self.is_reader = True
-            case "c":
-                self.is_catalog = True
-            case "o":
-                self.is_offline = True
-            case _:
-                pass
 
 
-class ProxyMysqlDataNode(PXCNode):
-   """
-   This class extends MySQL_Node and represent a MySQL server inside ProxySQL
-   Unique identifier:
-    IP:PORT:HG 
-   """
-   ACTION_DELETE = "delete"
-   ACTION_UPDATE = "update"
-   ACTION_INSERT = "insert"
-   def __init__(self, node:PXCNode, hgid=0, hgtype:str = "r",ip:str = "",port:int = 0):
-        # super().__init__(uri)
-        if (node is None or not node.session.is_connected()) and (ip == "" and port == 0):
-            raise ValueError("Node cannot be None, or not connected to the MySQL server")
-        elif (node is not None and node.session.is_connected()) and (ip == "" and port == 0):
-            self.id:ServerId = ServerId(hgid=hgid, ip=node.ip, port=node.port)
-            self.hostname:str = node.ip
-            self.port:int = node.port
-        else:
-            self.id: ServerId = ServerId(hgid=hgid, ip=ip, port=port)
-            self.hostname:str = ip
-            self.port:int = port
-
-        self.hostgroup:Hostgroup = Hostgroup(hgid,hgtype)
-        self.gtid_port:int = 0
-        self.status:str = ""
-        self.weight:int = 1000
-        self.compression:bool = False
-        self.max_connections:int = 2000
-        self.max_replication_lag:int = 0
-        self.use_ssl:int = 1
-        self.max_latency_ms:int =  0
-        self.comment:str =""
-        self.processed = False
-        self.actionlist = []
 
 
    

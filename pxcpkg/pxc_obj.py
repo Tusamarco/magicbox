@@ -1,15 +1,12 @@
 # object module defining all mysql related class tp PXC
-import time
-import sys
-import importlib
-from ftplib import print_line
 from logging import exception
-
 from typing import Dict
-
 from common import utils_mb
 import common.dbtools as dbtools
 from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node
+
+from proxysqlpkg.proxysql_obj import ProxySQLNode, ProxyMysqlDataNode
+from proxysqlpkg.proxysql_obj import ServerId
 
 import logging
 
@@ -20,8 +17,8 @@ class PXCNode(MysqlNode):
     PCX_Node class extends the Mysql_Node class
 
     Class implement methods to manage the specifics of a PXC node
-    PXC ip and port can be different from the superclass given they reflects the
-    information coming from wsrep_node_incoming_address. 
+    PXC ip and port can be different from the superclass given they reflect the
+    information coming from wsrep_node_incoming_address.
     """
     def __init__(self, uri=False):
         super().__init__(uri)
@@ -32,7 +29,6 @@ class PXCNode(MysqlNode):
         self.pxc_ip:str
         self.pxc_port:str
         self.is_main_node:bool = False
-
         try:
             if self.variables["wsrep_node_incoming_address"] is not None and \
                 len(self.variables["wsrep_node_incoming_address"]) >0:
@@ -62,9 +58,7 @@ class PXCNode(MysqlNode):
 
 
 
-class PXCCluster():
-    from proxysqlpkg.proxysql_obj import ProxySQLNode
-    from proxysqlpkg.proxysql_obj import ServerId, ProxyMysqlDataNode
+class PXCCluster:
     """
     PXC_Cluster 
     
@@ -76,16 +70,41 @@ class PXCCluster():
         self.name:str 
         self.nodes:Dict[str,PXCNode] = dict()
         self.is_primary:bool = False
-        
+        self.proxysql_node:ProxySQLNode = None
+
         if pxc_node.cluster_name is not None and len(pxc_node.cluster_name) > 0:
             self.name:str = pxc_node.cluster_name
-            self._fill_cluster(addresses)
+            self.discover_nodes(addresses)
             
         else:
             raise Pxc_Exception("Invalid Cluster name in PXC_node")
-        
-    
-    def _fill_cluster(self,addresses:list[str]=None):
+
+    @staticmethod
+    def connect_cluster(uri:str=None,addresses:list[str]=None):
+        """
+         This static method will read the main_node to identify the cluster and will set the basic information
+
+         Args:
+             - self
+             - uri
+                 if a valid URI to connect to the MySQL node is pass and the main ode is not present
+                 then the main node is created
+                 Valid URI form: <user>:[<password>]@<ip>:[<port>]
+
+         Raises:
+             - exception for:
+                 missing pxc_node
+                 pxc_node not in primary state
+
+         Returns
+             PXC_cluster
+         """
+        node = PXCNode(uri)
+        return PXCCluster(node,addresses)
+
+
+
+    def discover_nodes(self,addresses:list[str]=None, force:bool=False):
         """
         This method will read the main_node to identify the other nodes in the cluster
         to discover which nodes it will use the wsrep_incoming_addresseses and assign it to pxc_ip/port
@@ -111,11 +130,11 @@ class PXCCluster():
         3) connect to each node (using same credential as for main_node) 
         4) build a PXC cluster object with all nodes in
         """
-        if not self.main_node.cluster_is_primary():
-            raise Exception("Cluster is not in Primary state cannot proceed")
+        if not self.main_node.cluster_is_primary() and not force:
+            raise Exception("Cluster is not in Primary state cannot proceed with discovery of nodes. Please check the cluster status and try again. You may want to try with force = true")
         else:
             self.is_primary = True
-        if addresses is None:
+        if addresses is None or len(addresses) == 0:
             _addresses = self.main_node.get_status_value("wsrep_incoming_addresses").split(",")
         else:
             _addresses = addresses
@@ -171,7 +190,34 @@ class PXCCluster():
                     self.nodes[_node.pxc_node_name]=_node                
             
             # print(len(self.nodes))
-        
+
+    def refresh_pxc_cluster(self,uri:str=None,addresses:list[str]=None, force:bool=False):
+        """
+        Refresh action force the given cluster to close all connections to the nodes
+        Then to reopen them pointing to the given uri if given, otherwise the previously assigned uri will be used
+
+        Args:
+            force: force the discovery also if not in Primary state
+            addresses: Listo of addresses to use for the discovery of the nodes in case we have a different C class
+            uri (_type_): Require a well form uri to connect "user:[pass]@host:port"
+                          If Password is not in it will ask it interactively
+
+        Returns:
+            Void
+        """
+        if len(self) > 0 :
+            self.close_all()
+            self.nodes = None
+
+        if uri is not None:
+            self.main_node = None
+            self.connect_cluster(uri)
+        else:
+            uri = self.main_node.uri
+
+        self.discover_nodes(uri,addresses,force)
+
+
     def close_connections(self):
         """
         If object contains nodes then we loop, close connection to target
@@ -195,7 +241,35 @@ class PXCCluster():
             return len(self.nodes)
         return 0
 
-    def add_nodes_to_proxysql(self,proxy_node:ProxySQLNode, hgid:int = 0,force:bool=False):
+
+    def connect_proxysql_node(self,uri:str=None):
+        """
+        This method will add a proxysql node to the cluster
+        Then we use this node to setup/manage the PXC cluster nodes in Proxysql
+
+        Args:
+            - self
+            - uri
+                if a valid URI to connect to the MySQL node is pass and the main ode is not present
+                then the main node is created
+                Valid URI form: <user>:[<password>]@<ip>:[<port>]
+
+        Raises:
+            - exception for:
+                missing proxysql node
+
+
+        Returns
+            Void
+        """
+        from proxysqlpkg.proxysql_obj import ProxySQLNode
+        if dbtools.validate_uri(uri):
+            self.proxysql_node = ProxySQLNode(uri)
+        else:
+            logging.warning("Invalid uri: " + uri)
+
+
+    def add_nodes_to_proxysql(self, hgid:int = 0,force:bool=False):
         """
         Done 1) build ProxySQL node object
         2) verify if servers inside Proxy already exists 
@@ -220,6 +294,7 @@ class PXCCluster():
             - add query rules For 100/101 linked to username. (I am not sure but this is to be consistent with that shit of proxysql-admin)
 
         """
+        proxy_node = self.proxysql_node
         if proxy_node is None or not proxy_node.session.is_connected():
             return Exception("Proxy node cannot be None, or not connected to the ProxySQL server")
         if len(self) == 0:
@@ -265,7 +340,6 @@ class PXCCluster():
         Returns:
 
         """
-        from proxysqlpkg.proxysql_obj import ProxyMysqlDataNode, ServerId
 
         _proxysql_backend:Dict[ServerId,ProxyMysqlDataNode] = {}
         for _node in self.nodes.values():
@@ -288,3 +362,5 @@ class PXCCluster():
 
 class Pxc_Exception(Exception):
     pass
+
+
