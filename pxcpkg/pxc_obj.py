@@ -29,6 +29,7 @@ class PXCNode(MysqlNode):
         self.pxc_ip:str
         self.pxc_port:str
         self.is_main_node:bool = False
+
         try:
             if self.variables["wsrep_node_incoming_address"] is not None and \
                 len(self.variables["wsrep_node_incoming_address"]) >0:
@@ -65,12 +66,16 @@ class PXCCluster:
     PXC_Cluster, represent the cluster and provide information about it and methods to manage it 
     
     """
-    def __init__(self, pxc_node:PXCNode,addresses:list[str]=None):
+    HANDLER_SCHEDULER = 1
+    HANDLER_INTERNAL = 2
+
+    def __init__(self, pxc_node:PXCNode,addresses:list[str]=None,handler:int = HANDLER_SCHEDULER):
         self.main_node = pxc_node
         self.name:str 
         self.nodes:Dict[str,PXCNode] = dict()
         self.is_primary:bool = False
         self.proxysql_node:ProxySQLNode = None
+        self.handler:str = handler
 
         if pxc_node.cluster_name is not None and len(pxc_node.cluster_name) > 0:
             self.name:str = pxc_node.cluster_name
@@ -307,8 +312,11 @@ class PXCCluster:
 
         _proxysql_backend = self._configure_pxc_backend_nodes(hgid)
 
-        if proxy_node.check_nodes_if_existing(_proxysql_backend,hgid,force):
+        check_results = self.check_cluster_on_proxysql(hgid,False)
+
+        if check_results["code"] > 0:
             # We have node if force is in place we will delete them otherwise will not continue
+
             if force:
                 #delete all
                 logging.debug("Delete all nodes")
@@ -321,6 +329,58 @@ class PXCCluster:
             # No node is present we can add without problem
             logging.debug("Add cluster starts")
             pass
+
+    def check_cluster_on_proxysql(self,hgid:int=0, auto_reconcile:bool=False):
+        """
+        This function checks if the PXC nodes are already present in the ProxySQL Server
+        If the PXC handler is Scheduler it will check for all HGs related to the requested HG
+        If handler is internal it will check against the given HG and then mysql_galera_hostgroups
+
+        It is possible to force the reconciling, in this case the given server list will be modified applying the settings present in the ProxySQL server
+        At the same time it will be check if multiwriter is in place and settings on ProxySQL will be modified accordingly.
+
+        Args:
+            hgid:
+            auto_reconcile:
+
+        Returns: _proxysql_backend: list of PXC nodes , int: Code 0 no server or HG found, 1 server(s) found no reconcile ,
+                2 server found and reconcile, 3 no server found but HG already in use, 4 Servers and HG found
+
+        """
+
+        proxy_node = self.proxysql_node
+        if proxy_node is None or not proxy_node.session.is_connected():
+            return Exception("Proxy node cannot be None, or not connected to the ProxySQL server")
+
+        if len(self) == 0:
+            return exception(msg="Nothing to add cluster is empty")
+
+        # In case of Scheduler handler we will build the full server list and if auto is in place try to reconcile
+        # If auto is not in place we return that we had reconcile
+        if self.handler == PXCCluster.HANDLER_SCHEDULER:
+            _proxysql_backend = self._configure_pxc_backend_nodes(hgid)
+            check = proxy_node.check_nodes_if_existing(_proxysql_backend, hgid)
+            servers = check["servers"]
+            check_hg = check["hg"]
+
+            if servers and not check_hg and auto_reconcile:
+                _proxysql_backend = proxy_node.reconcile_cluster(_proxysql_backend)
+                return {"list" : _proxysql_backend, "code" :2}
+
+            elif servers and not check_hg and not auto_reconcile:
+                return {"list": _proxysql_backend, "code": 1}
+
+            elif check_hg and not servers:
+                return {"list": _proxysql_backend, "code": 3}
+
+            elif check_hg and servers:
+                return {"list": _proxysql_backend, "code": 4}
+
+            return {"list": _proxysql_backend, "code": 0}
+
+        else:
+            pass
+
 
     def _configure_pxc_backend_nodes(self,hgid:int = 0):
         """
@@ -340,6 +400,9 @@ class PXCCluster:
         Returns:
 
         """
+
+        # This is valid if we use the scheduler to handle the cluster
+        # In case not we need to check mmysql_galera_hostgroups
 
         _proxysql_backend:Dict[ServerId,ProxyMysqlDataNode] = {}
         for _node in self.nodes.values():

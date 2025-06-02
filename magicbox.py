@@ -56,6 +56,6 @@ class MagicC:
         # cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
         cluster.connect_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
         # proxy = processor.set_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
-        cluster.add_nodes_to_proxysql(100,True)
+        cluster.add_nodes_to_proxysql(100,False)
         cluster.close_connections()
         # processor.close_connections()

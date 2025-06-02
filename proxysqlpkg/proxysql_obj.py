@@ -186,8 +186,12 @@ class ProxySQLNode(MysqlNode):
                             
         """
         already_present = []
+        hg_exists = False
         for server in self.mysql_nodes.keys():
-            # it_exists = False
+
+            if server.hg_id == hgid:
+                hg_exists = True
+
             for node in incoming_bck_nodes.keys():
                 if node.server_ip == server.server_ip and node.server_port == server.server_port and node.hg_id == server.hg_id:
                     already_present.append(f"Node {node.server_ip} Port: {node.server_port} hostgroup_id: {node.hg_id}")
@@ -203,29 +207,31 @@ class ProxySQLNode(MysqlNode):
             # print_line(utils_mb.print_separator("#", "[WARNING]"))
             # print(
             logging.warning(
-                f"The following nodes are already present in the HostGroup id: {hgid} and related hostgroup_id={hgid + 1} " +
-                f"or hostgroup_id={hgid + 8000} or hostgroup_id={hgid + 8001} or or hostgroup_id={hgid + 9000} or hostgroup_id={hgid + 9001}")
+                f"The following nodes are already present in the HostGroup id: {hgid} and related hostgroup_id")
 
             for node_str in already_present:
                 # print(
                 logging.warning(node_str)
 
             logging.warning(utils_mb.print_separator("-"))
-            if not force:
-                # print(
-                logging.warning(f"To automatically remove all related servers use option 'force=True'.\n" +
-                                f"Or run delete_pxc_cluster_from_proxysql(hgid={hgid}).\n" +
-                                "Or clean all related servers manually then rerun add_nodes_to_proxysql()")
-            else:
-                # print(
-                logging.warning("Forcing is in place all the above nodes will be removed")
+            logging.warning("Nodes already existing, you may try to reconcile the cluster ")
+            # if not force:
+            #     print(
+            #     logging.warning(f"I will try to reconcile the cluster with the ProxySQL backend nodes.  To automatically remove all related servers use option 'force=True'.\n" +
+            #                     f"Or run delete_pxc_cluster_from_proxysql(hgid={hgid}).\n" +
+            #                     "Or clean all related servers manually then rerun add_nodes_to_proxysql()")
+            # else:
+            #     # print(
+            #     logging.warning("Forcing is in place all the above nodes will be removed")
 
             # print_line(
             logging.warning(utils_mb.print_separator("#"))
-            return True
+            return {"servers" : True, "hg" :hg_exists}
         else:
+            return {"servers" : False, "hg" :hg_exists}
 
-            return False
+
+
 
     # def set_hostgroup(self, hg_id:int = 0,hg_type:str = None):
     #     """
