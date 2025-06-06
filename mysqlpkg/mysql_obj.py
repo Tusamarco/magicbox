@@ -110,7 +110,7 @@ class MysqlNode:
                     self.variables = dbtools.get_variables(self.session,"")
                     self.status = dbtools.get_status(self.session,"")                
                     # print(
-                    logging.info("Connected to data node %s (%s - %s) " % (self.variables["hostname"],self.variables["version"],self.variables["version_comment"]))
+                    logging.info("Connected to datanode %s %s:%s (%s - %s) " % (self.variables["hostname"],self.ip,self.port,self.variables["version"],self.variables["version_comment"]))
                 '''
                  TODO
                  to find a common way to close the connection to the db at the end of the operation

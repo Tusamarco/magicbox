@@ -50,12 +50,14 @@ class MagicC:
 
     @staticmethod
     def check_all():
+        hgid = 200
         # processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
-        cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@192.168.4.205:3306",["192.168.4.231","192.168.4.205","192.168.4.21"])
+        cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@10.211.55.5:3307",["10.211.55.5:3307","10.211.55.5:3308","10.211.55.5:3309"])
         # cluster.discover_nodes(["192.168.4.231","192.168.4.205","192.168.4.21"])
         # cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
-        cluster.connect_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
+        cluster.connect_proxysql_node("cluster1:clusterpass@10.211.55.5:6032")
         # proxy = processor.set_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
-        cluster.add_nodes_to_proxysql(100,False)
+        cluster.add_nodes_to_proxysql(hgid,False)
+        cluster.reconcile_cluster(hgid)
         cluster.close_connections()
         # processor.close_connections()
