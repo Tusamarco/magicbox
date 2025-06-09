@@ -384,6 +384,10 @@ class PXCCluster:
         # If auto is not in place we return that we had reconcile
         if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
             _proxysql_backend = self._transform_pxc_nodes_to_proxysql_backend(hgid)
+
+            # Refresh backend node in proxysql to be sure we get the last scenario
+            proxy_node.refresh_bakend_nodes()
+
             check = proxy_node.check_nodes_if_existing(_proxysql_backend, hgid)
             servers = check["servers"]
             check_hg = check["hg"]

@@ -157,7 +157,7 @@ class ProxySQLNode(MysqlNode):
         Returns: Void
 
         """
-        sql = ("select * from mysql_servers")
+        sql = ("select * from runtime_mysql_servers")
         cursor = self.session.cursor(dictionary=True)
         cursor.execute(sql)
         mysql_servers = cursor.fetchall()
@@ -174,6 +174,9 @@ class ProxySQLNode(MysqlNode):
             bkend_node.comment = server["comment"]
             self.mysql_nodes[bkend_node.id] = bkend_node
 
+    def refresh_bakend_nodes(self):
+        self.mysql_nodes = {}
+        self._load_back_end_nodes()
 
     def check_nodes_if_existing(self, incoming_bck_nodes:dict[ServerId]={},hgid:int=0,force:bool=False ):
         """
@@ -300,38 +303,119 @@ class ProxySQLNode(MysqlNode):
         _proxysql_backend_servers = None
         _proxysql_backend_servers = self._get_nodes_by_hostgroups([hgid, hgid + 8000])
 
-        # Compare the two lists where the reference is the PXC set
-        writer_ok = False
-        current_writers = 0
-        main_writer = None
+        count_proxysql_writers = self._get_number_of_backend_nodes_by_hgid(hgid)
+        count_proxysql_config_writers = self._get_number_of_backend_nodes_by_hgid(hgid + 8000)
+        main_writer_node:ProxyMysqlDataNode = self._get_main_node_from_pxc(pxc_node_list)
 
-        ## NOT working must redesign the solution probably easier to count the nodes and then take action
+        pxc_writer_is_in = False
+        pxc_writer_config_is_in = False
 
+        proxy_config_purged_w = False
+        proxy_config_purged_r = False
+        proxy_purged_r = False
+
+        # First check if we need to add nodes in writer hg
         for pxc_node in pxc_node_list.values():
             if pxc_node.id.hg_id == hgid:
-                if pxc_node.main_writer:
-                    main_writer = pxc_node
-                for proxy_bkend in _proxysql_backend_servers.values():
-                    if proxy_bkend.id.hg_id == pxc_node.id.hg_id and proxy_bkend.status == ProxyMysqlDataNode.NODE_ONLINE:
-                        writer_ok = True
-                        current_writers = +1
-                        break
 
-        if current_writers > number_of_writers:
-            if number_of_writers > 1:
-                logging.warning(f"The number of current writers ({current_writers}) exceeds the number defined cluster writers {number_of_writers}")
-            elif number_of_writers == 1:
-                logging.warning(f"The number of current writers ({current_writers}) exceeds the number defined cluster writers {number_of_writers}, I am going to remove them and keep only the preferred")
-                #Move a node to OFFLINE_SOFT
-                self.remove_writers_not_preferred(main_writer)
+                # Main node (default writer) is not present in the ProxySQL list of nodes to use for write we need to insert it
+                if self._is_node_equal_to_node(pxc_node, main_writer_node) and not self._get_if_node_exists_in_backend_nodes(pxc_node.id):
+                    logging.warning(f"Preferred writer node {pxc_node.id.hg_id}:{pxc_node.id.server_ip}:{pxc_node.id.server_port} is not present in the ProxySQL HG {hgid}, will add it")
+                    # If number of writers is 1 then we will add it and set OFFLINE_SOFT the current one
+                    if number_of_writers == 1:
+                        nodes_to_put_offline_soft = self._get_nodes_by_hostgroups([hgid])
+                        for node in nodes_to_put_offline_soft.values():
+                            self.move_backend_to_offline_soft(node)
 
-        if not writer_ok:
-            raise Exception("No writers in PXC nodes match the ones in the Proxysql backend, cannot reconcile")
+                    #  then we add the writer if missed
+                    self.insert_backend(pxc_node)
 
-        # let us now check the 8000 group
+            # let us now check the 8000 group
+            if pxc_node.id.hg_id == (hgid + 8000):
+                nodes_to_remove = self._get_nodes_by_hostgroups([hgid + 8000])
+                if not proxy_config_purged_w:
+                    proxy_config_purged_w = True
+                    for node in nodes_to_remove.values():
+                        self.delete_backend(node)
 
-       # Now If we use native galera support
+                self.insert_backend(pxc_node)
+
+            # let us now check the hgid + 1 (reader) group
+            if pxc_node.id.hg_id == (hgid + 1):
+                nodes_to_remove = self._get_nodes_by_hostgroups([hgid + 1])
+                if not proxy_purged_r:
+                    proxy_purged_r = True
+                    for node in nodes_to_remove.values():
+                        self.delete_backend(node)
+
+                self.insert_backend(pxc_node)
+
+            # let us now check the 8000 (reader) group
+            if pxc_node.id.hg_id == (hgid + 8001):
+                nodes_to_remove = self._get_nodes_by_hostgroups([hgid + 8001])
+                if not proxy_config_purged_r:
+                    proxy_config_purged_r = True
+                    for node in nodes_to_remove.values():
+                        self.delete_backend(node)
+
+                self.insert_backend(pxc_node)
+        self.apply_backend()
+
+        # Now If we use native galera support
         pass
+
+    def _get_number_of_backend_nodes_by_hgid(self, hgid):
+        """
+        internal function to get the number of elements in a Hg
+
+        :param hgid:
+        :return:int number of nodes
+        """
+        counter = 0
+
+        for node_id in self.mysql_nodes:
+            if node_id.hg_id == hgid:
+                counter += 1
+
+        return counter
+    def _is_node_equal_to_node(self,node1:ProxyMysqlDataNode,node2:ProxyMysqlDataNode):
+        """
+        Compare two nodes by id and return true if they match
+        :param node1:ProxyMysqlDataNode
+        :param node2:ProxyMysqlDataNode
+        :return:bool
+        """
+        if node1.id.hg_id == node2.id.hg_id and node1.id.server_ip == node2.id.server_ip and node1.id.server_port == node1.id.server_port:
+            return True
+
+        return False
+
+    def _get_if_node_exists_in_backend_nodes(self,serverid:ServerId):
+        """
+        Internal function to get if a node with the given id exists in the backend
+        :param serverid:
+        :return:bool
+
+        """
+        for bckend_id in self.mysql_nodes:
+            if serverid.hg_id == bckend_id.hg_id and serverid.server_ip == bckend_id.server_ip and serverid.server_port == bckend_id.server_port:
+                return True
+
+        return False
+
+    def _get_main_node_from_pxc(self,pxc_nodes):
+        """
+        Internal function to identify the main node out from the PXC list
+        Main node is by default the preferred primary
+        :param pxc_nodes:
+        :return: ProxyMySQLDataNode instance
+        """
+        for pxc_node in pxc_nodes.values():
+            if pxc_node.main_writer:
+                return pxc_node
+
+        return None
+
     def move_backend_to_offline_soft(self,node:ProxyMysqlDataNode=None,apply:bool=False):
         """
         Move the node to offline soft
@@ -345,9 +429,9 @@ class ProxySQLNode(MysqlNode):
             return False
         try:
             cursor = self.session.cursor(dictionary=False)
-            cursor.execute(f"Update mysql_servers set status='OFFLINE_SOFTf' where hostgroup_id={node.id.hg_id} and hostname='{node.id.server_ip}' and port={node.id.server_port}")
+            cursor.execute(f"Update mysql_servers set status='OFFLINE_SOFT' where hostgroup_id={node.id.hg_id} and hostname='{node.id.server_ip}' and port={node.id.server_port}")
             if apply:
-                cursor.execute("LOAD MYSQL SERVERS TO RUNTIME; SAVE MYSQL SERVERS TO DISK;")
+                self.apply_backend()
         except:
             raise Exception("Error while moving mysql server to offline soft")
 
@@ -366,9 +450,9 @@ class ProxySQLNode(MysqlNode):
             return False
         try:
             cursor = self.session.cursor(dictionary=False)
-            cursor.execute(f"delete mysql_servers where hostgroup_id={node.id.hg_id} and hostname='{node.id.server_ip}' and port={node.id.server_port}")
+            cursor.execute(f"delete from mysql_servers where hostgroup_id={node.id.hg_id} and hostname='{node.id.server_ip}' and port={node.id.server_port}")
             if apply:
-                cursor.execute("LOAD MYSQL SERVERS TO RUNTIME; SAVE MYSQL SERVERS TO DISK;")
+                self.apply_backend()
         except:
             raise Exception("Error while moving mysql server to offline soft")
 
@@ -387,12 +471,13 @@ class ProxySQLNode(MysqlNode):
             return False
         try:
             cursor = self.session.cursor(dictionary=False)
-            cursor.execute(f"insert into mysql_servers (hostname,hostgroup_id,port,weight,use_ssl,max_connections,comment) values("
-                           f"'{node.id.server_ip}','{node.id.hg_id},{node.id.server_port}','{node.weight},{node.max_connections}','{node.use_ssl},{node.comment}')")
+            sql= f"insert into mysql_servers (hostname,hostgroup_id,port,weight,max_connections,use_ssl,comment) values('{node.id.server_ip}',{node.id.hg_id},{node.id.server_port},{node.weight},{node.max_connections},{node.use_ssl},'{node.comment}')"
+            cursor.execute(sql)
+
             if apply:
-                cursor.execute("LOAD MYSQL SERVERS TO RUNTIME; SAVE MYSQL SERVERS TO DISK;")
+                self.apply_backend()
         except:
-            raise Exception("Error while moving mysql server to offline soft")
+            raise Exception("Error while inserting a new mysql server ")
 
         return True
 
@@ -402,7 +487,8 @@ class ProxySQLNode(MysqlNode):
         """
         try:
             cursor = self.session.cursor(dictionary=False)
-            cursor.execute("LOAD MYSQL SERVERS TO RUNTIME; SAVE MYSQL SERVERS TO DISK;")
+            cursor.execute("LOAD MYSQL SERVERS TO RUNTIME")
+            cursor.execute("SAVE MYSQL SERVERS TO DISK")
 
         except:
             raise Exception("Error while applying mysql server")
@@ -415,7 +501,7 @@ class ProxySQLNode(MysqlNode):
             cursor = self.session.cursor(dictionary=False)
             cursor.execute(f"delete mysql_servers where hostgroup_id={node.id.hg_id} and hostname !='{node.id.server_ip}' and port !={node.id.server_port}")
             if apply:
-                cursor.execute("LOAD MYSQL SERVERS TO RUNTIME; SAVE MYSQL SERVERS TO DISK;")
+                self.apply_backend()
 
         except:
             raise Exception("Error while removing backend writer nodes not preferred")
