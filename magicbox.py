@@ -57,7 +57,37 @@ class MagicC:
         # cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
         cluster.connect_proxysql_node("cluster1:clusterpass@10.211.55.5:6032")
         # proxy = processor.set_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
-        cluster.add_nodes_to_proxysql(hgid,False)
+        cluster.add_cluster_to_proxysql(hgid,False)
         cluster.reconcile_cluster(hgid)
-        cluster.close_connections()
+
         # processor.close_connections()
+        # json_text='''
+        # {"cluster":{"nodes":[{"id": {"hg_id": 8200, "server_ip": "10.211.55.5", "server_port": 3307}, "gtid_port": "0", "status": "ONLINE",
+        #  "weight": "1000", "compression": "0", "max_connections": "2000", "max_replication_lag": "0", "use_ssl": "1",
+        #  "max_latency_ms": "0", "comment": ""},
+        # {"id":{"hg_id": 8201, "server_ip": "10.211.55.5", "server_port": 3307}, "gtid_port": "0", "status": "ONLINE",
+        # "weight": "997", "compression": "0", "max_connections": "2000", "max_replication_lag": "0", "use_ssl": "1",
+        # "max_latency_ms": "0", "comment": ""}]}}
+        # '''
+
+        json_text = '''
+         {"cluster":{"nodes":[{"id": {"hg_id": 8200, "server_ip": "10.211.55.5", "server_port": 3307},
+          "weight": "1000", "compression": "0", "max_connections": "2000", "max_replication_lag": "0", "use_ssl": "1",
+          "max_latency_ms": "0", "comment": "Primary Writer"},
+         {"id":{"hg_id": 8201, "server_ip": "10.211.55.5", "server_port": 3307}, "gtid_port": "0", "status": "ONLINE",
+         "weight": "997", "compression": "0", "max_connections": "2000", "max_replication_lag": "0", "use_ssl": "1",
+         "max_latency_ms": "0", "comment": "Not Primary Reader"}]}}
+         '''
+        cluster.proxysql_node.config_nodes(json_text)
+
+        hgsid:list = cluster.get_hostgroup_ids_by_handler_support(200)
+        json_request=[]
+        for hgid in hgsid:
+            json_request.append(hgid.hg_id)
+
+        print(cluster.proxysql_node.get_json_by_hostgroups(json_request))
+        pxc = cluster.get_node_by_pxc_and_cluster_name("node1")
+        print(pxc.pxc_node_name + " " + pxc.pxc_ip + ":"+ pxc.pxc_port)
+
+
+        cluster.close_connections()
