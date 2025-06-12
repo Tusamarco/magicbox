@@ -86,8 +86,11 @@ class MagicC:
             json_request.append(hgid.hg_id)
 
         print(cluster.proxysql_node.get_json_by_hostgroups(json_request))
-        pxc = cluster.get_node_by_pxc_and_cluster_name("node1")
-        print(pxc.pxc_node_name + " " + pxc.pxc_ip + ":"+ pxc.pxc_port)
+        pxc = cluster.get_node_by_pxc_name("node1")
+        backend = cluster.get_Proxysql_backend_by_pxc_name("node2",201)
 
+        print(pxc.pxc_node_name + " " + pxc.pxc_ip + ":"+ pxc.pxc_port)
+        if backend is not None:
+            print(backend.id.hg_id + " " + backend.id.server_ip + ":" + backend.id.server_port)
 
         cluster.close_connections()

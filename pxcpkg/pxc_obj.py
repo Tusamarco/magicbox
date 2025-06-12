@@ -1,14 +1,16 @@
 # object module defining all mysql related class tp PXC
+from io import StringIO
 from logging import exception
 from typing import Dict
 from common import utils_mb
 import common.dbtools as dbtools
 from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node
 
-from proxysqlpkg.proxysql_obj import ProxySQLNode, ProxyMysqlDataNode
+from proxysqlpkg.proxysql_obj import ProxySQLNode, ProxyMysqlDataNode, Hostgroup
 from proxysqlpkg.proxysql_obj import ServerId
 
 import logging
+import json
 
 class PXCNode(MysqlNode):
     """
@@ -275,7 +277,7 @@ class PXCCluster:
             logging.warning("Invalid uri: " + uri)
 
 
-    def add_nodes_to_proxysql(self, hgid:int = 0,force:bool=False):
+    def add_cluster_to_proxysql(self, hgid:int = 0,force:bool=False):
         """
         Done 1) build ProxySQL node object
         2) verify if servers inside Proxy already exists 
@@ -317,16 +319,16 @@ class PXCCluster:
 
         if check_results["code"] > 0:
             # We have node if force is in place we will delete them otherwise will not continue
-            logging.warning(utils_mb.print_separator("#", ""))
+            logging.info(utils_mb.print_separator("#", ""))
 
             if check_results["code"] == 1:
-                logging.warning("Nodes are already present in a different HG id. Reconcile option is possible modifying HG id")
+                logging.info("Nodes are already present in a different HG id. Reconcile option is possible modifying HG id")
 
             if check_results["code"] == 2:
-                logging.warning("Nodes are not present but HG is, no reconcile option is possible change HG id")
+                logging.info("Nodes are not present but HG is, no reconcile option is possible change HG id")
 
             if check_results["code"] == 3:
-                logging.warning("Nodes and HG are present, reconcile action is possible")
+                logging.info("Nodes and HG are present, reconcile action is possible")
 
 
             # logging.warning(utils_mb.print_separator("#", ""))
@@ -340,8 +342,8 @@ class PXCCluster:
             #     logging.debug("Exit")
         else:
             # No node is present we can add without problem
-            logging.debug("No nodes ot Host Group present in ProxySQL server")
-            logging.debug("Add cluster starts")
+            logging.info("No nodes ot Host Group present in ProxySQL server")
+            logging.info("Add cluster starts")
             pass
 
     def reconcile_cluster(self, hgid):
@@ -354,6 +356,25 @@ class PXCCluster:
         pxc_node_list = self._transform_pxc_nodes_to_proxysql_backend(hgid)
         self.proxysql_node.reconcile_hostgroup(hgid, pxc_node_list,self.number_of_writers,self.handler)
 
+
+    def add_nodes_to_proxy(self, hgid ):
+        """
+        This method add all the nodes to the ProxySQL, no check or reconciliation is done, so it assume an empty ProxySQL or that you have already done all the relevant checks
+
+        :param hgid:int hgid of the Host Group to add nodes to
+
+        """
+        pxc_node_list = self._transform_pxc_nodes_to_proxysql_backend(hgid)
+        try:
+            for node in pxc_node_list.values():
+                self.proxysql_node.insert_backend(node)
+
+            self.proxysql_node.apply_backend()
+        except  Exception as e:
+            # Get the exception text
+            error_text = str(e)
+            logging.warning("Adding nodes to ProxySQL failed with error: {}".format(error_text))
+            pass
 
     def check_cluster_on_proxysql(self,hgid:int=0):
         """
@@ -451,11 +472,71 @@ class PXCCluster:
 
         return _proxysql_backend
 
-        # ///////////////////   WIP here
+    def get_hostgroup_ids_by_handler_support(self,hgid:int=0):
+        """
+        We return a different list of hostgroup id according to the Handler
+        if we use the Scheduler we have:
+            - defined by user (IE 100) for writer(s)
+            - Read defined + 1
+            - Configuration write: defined + 8000
+            - Configuration read: defined + 8001
 
+        if we use the internal support:
+        - defined by user (IE 100) for write
+        - Read defined + 1
+        - Backup_writer: defined + 7000
+        - Offline: defined + 9000
 
+        :param hgid:int Hostgroup Id define by user
 
+        :return: list of hostgroup id
+        """
+        ids = []
+        if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+            ids.append(Hostgroup(hgid,"w"))
+            ids.append(Hostgroup(hgid + 1, "r"))
+            ids.append(Hostgroup(hgid + 8000, "c"))
+            ids.append(Hostgroup(hgid + 8001, "c"))
 
+        elif self.handler == ProxyMysqlDataNode.HANDLER_INTERNAL:
+            ids.append(Hostgroup(hgid,"w"))
+            ids.append(Hostgroup(hgid + 1, "r"))
+            ids.append(Hostgroup(hgid + 7000, "b"))
+            ids.append(Hostgroup(hgid + 8001, "o"))
+
+        return ids
+
+    def get_node_by_pxc_name(self,pxc_node_name:str=None):
+        """
+        Return a node that match the given PXC naode name
+
+        :param pxc_node_name: name of the pxc node, mandatory
+        :return: pxc node
+        """
+        if pxc_node_name is None:
+            return None
+
+        for pxc in self.nodes.values():
+            if pxc_node_name == pxc.pxc_node_name:
+                return pxc
+
+    def get_Proxysql_backend_by_pxc_name(self,pxc_node_name:str=None,hgid:int=0):
+        """
+        Return the Proxysql backend that match the given PXC by name
+
+        :param pxc_node_name: name of the pxc node, mandatory
+        :return: proxysql backend
+        """
+        if pxc_node_name is None:
+            return None
+
+        pxc_node = self.get_node_by_pxc_name(pxc_node_name)
+        if pxc_node is None:
+            return None
+
+        for backend in self.proxysql_node.mysql_nodes.values():
+            if backend.id.server_ip == pxc_node.ip and backend.id.server_port == pxc_node.port and backend.id.hg_id == hgid:
+                return backend
 
 class Pxc_Exception(Exception):
     pass
