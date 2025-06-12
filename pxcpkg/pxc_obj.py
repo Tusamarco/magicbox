@@ -454,6 +454,8 @@ class PXCCluster:
         # If we have more than one writer then we loop and add, otherwise we check for the main node and by default we set that as writer.
 
         for _node in self.nodes.values():
+            _p_node_bkend_w:ProxyMysqlDataNode=None
+
             if self.number_of_writers > 1:
                 _p_node_bkend_w = ProxyMysqlDataNode(_node, hgid, "w")
 
@@ -465,7 +467,9 @@ class PXCCluster:
             _p_node_bkend_cw = ProxyMysqlDataNode(_node, hgid + 8000, "c")
             _p_node_bkend_cr = ProxyMysqlDataNode(_node, hgid + 8001, "c")
 
-            _proxysql_backend[_p_node_bkend_w.id] = _p_node_bkend_w
+            if _p_node_bkend_w is not None:
+                _proxysql_backend[_p_node_bkend_w.id] = _p_node_bkend_w
+
             _proxysql_backend[_p_node_bkend_r.id] = _p_node_bkend_r
             _proxysql_backend[_p_node_bkend_cw.id] = _p_node_bkend_cw
             _proxysql_backend[_p_node_bkend_cr.id] = _p_node_bkend_cr
@@ -535,7 +539,7 @@ class PXCCluster:
             return None
 
         for backend in self.proxysql_node.mysql_nodes.values():
-            if backend.id.server_ip == pxc_node.ip and backend.id.server_port == pxc_node.port and backend.id.hg_id == hgid:
+            if backend.id.server_ip == pxc_node.ip and str(backend.id.server_port) == pxc_node.port and backend.id.hg_id == hgid:
                 return backend
 
 class Pxc_Exception(Exception):
