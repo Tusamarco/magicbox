@@ -96,5 +96,7 @@ class MagicC:
         print(pxc.pxc_node_name + " " + pxc.pxc_ip + ":"+ pxc.pxc_port)
         if backend is not None:
             print(str(backend.id.hg_id) + " " + backend.id.server_ip + ":" + str(backend.id.server_port))
+            print(backend.serialize_proxysql_node())
+
 
         cluster.close_connections()

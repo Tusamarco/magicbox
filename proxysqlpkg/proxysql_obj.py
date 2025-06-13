@@ -73,6 +73,67 @@ class ProxyMysqlDataNode(MysqlNode):
    HANDLER_INTERNAL = 2
    JSON_CONFIGURABLE = ["gtid_port","status","weight","compression","max_connections","max_replication_lag","use_ssl","max_latency_ms","comment"]
 
+
+   def serialize_proxysql_node(self) -> str:
+       """
+       Converts a ProxyMysqlDataNode instance into a JSON string representation.
+
+       Args:
+           node_instance: An instance of the ProxyMysqlDataNode class.
+
+       Returns:
+           A JSON formatted string representing the instance's attributes.
+       """
+       node_instance = self
+
+       if not isinstance(node_instance, ProxyMysqlDataNode):
+           raise TypeError("Input must be an instance of ProxyMysqlDataNode.")
+
+       data = {}
+       # Iterate through all instance attributes (excluding special/private ones)
+       for key, value in node_instance.__dict__.items():
+           # Skip attributes that are typically not part of the data model
+           # or are internal Python mechanisms.
+           if key.startswith('_') or key in ["session", "action_list"]:
+               continue
+
+           if isinstance(value, (int, str, bool, float, type(None))):
+               # Directly include primitive types
+               data[key] = value
+           elif isinstance(value, (ServerId, Hostgroup)):
+               # If it's a custom object with a to_dict() method, use it.
+               # This makes the serialization of nested objects explicit and clean.
+               if hasattr(value, 'to_dict') and callable(value.to_dict):
+                   data[key] = value.to_dict()
+               else:
+                   # Fallback for custom objects without to_dict(), try to serialize their __dict__
+                   # This might be less robust for complex objects.
+                   try:
+                       data[key] = value.__dict__
+                   except AttributeError:
+                       # If an object doesn't have __dict__ (e.g., slots), represent as string
+                       data[key] = str(value)
+           elif isinstance(value, list):
+               # Handle lists, e.g., action_list
+               serializable_list = []
+               for item in value:
+                   if isinstance(item, (int, str, bool, float, type(None))):
+                       serializable_list.append(item)
+                   elif hasattr(item, 'to_dict') and callable(item.to_dict):
+                       serializable_list.append(item.to_dict())
+                   else:
+                       try:
+                           serializable_list.append(item.__dict__)
+                       except AttributeError:
+                           serializable_list.append(str(item))
+               data[key] = serializable_list
+           else:
+               # For other complex types, we might choose to skip, represent as string,
+               # or raise an error if not explicitly handled.
+               data[key] = str(value)  # Default to string representation for unhandled types
+
+       return json.dumps(data, indent=2)
+
    def __init__(self, node:MysqlNode, hgid=0, hgtype:str = "r",ip:str = "",port:int = 0):
         # super().__init__(uri)
         if (node is None or not node.session.is_connected()) and (ip == "" and port == 0):
@@ -100,27 +161,29 @@ class ProxyMysqlDataNode(MysqlNode):
         self.action_list = []
         self.main_writer = False
 
-   def to_json(self):
-       data:dict[str,str] =dict()
-       id:dict[str,str] =dict()
-       id["hg_id"] = self.id.hg_id
-       id["server_ip"]=self.id.server_ip
-       id["server_port"]=self.id.server_port
-       data["id"] = id
-       data["gtid_port"] = self.gtid_port
-       data["status"] = self.status
-       data["weight"] = self.weight
-       data["compression"] = self.compression
-       data["max_connections"] = self.max_connections
-       data["max_replication_lag"] = self.max_replication_lag
-       data["use_ssl"] = self.use_ssl
-       data["max_latency_ms"] = self.max_latency_ms
-       data["comment"] = self.comment
-       return data
+   #  Deprecated
+   # def to_json(self):
+   #     data:dict[str,str] =dict()
+   #     id:dict[str,str] =dict()
+   #     id["hg_id"] = self.id.hg_id
+   #     id["server_ip"]=self.id.server_ip
+   #     id["server_port"]=self.id.server_port
+   #     data["id"] = id
+   #     data["gtid_port"] = self.gtid_port
+   #     data["status"] = self.status
+   #     data["weight"] = self.weight
+   #     data["compression"] = self.compression
+   #     data["max_connections"] = self.max_connections
+   #     data["max_replication_lag"] = self.max_replication_lag
+   #     data["use_ssl"] = self.use_ssl
+   #     data["max_latency_ms"] = self.max_latency_ms
+   #     data["comment"] = self.comment
+   #     return data
 
    def return_data_from_json(self,json_text):
        data = json.loads(json_text)
        return data
+
 
 
 class ProxySQLCluster:
@@ -318,25 +381,32 @@ class ProxySQLNode(MysqlNode):
         - Add all the others
         """
 
-        # First we process the writers
+        # First, we process the writers
         if number_of_writers==0:
             number_of_writers = 1
 
-        # We get the servers from both sides related to writer HGs (hgid and hgid + 8000)
-        # First we check for hgid, if the node are not the same and not in hgid + 8000, then we have an issue and cannot reconcile.
-        # Then we need to compare the list of server in HG + 8000 and check if the same, if not we adapt Proxysql server to PXC
-        # Adding or deleting
+        """
+        We check if Main node is in the writer(s), if more then 1 writer we just add it, if 1 writer, we put ofline_soft the current writer and insert the new writer (main Node)
+        then process reads and backends.
+        For reads and backend we just delete them and reload. 
+        
+        ******* WARNING ******
+        I do not recall if ProxySQL is smart enough when copy the server to runtime to DO NOT close the connections to the servers if they are the same ip:password:hg or if instead they 
+        are disconnected.
+        If they are need to revisit the approach.
+        TODO 
+        """
 
         # Get the list of nodes related to the writer
-        _proxysql_backend_servers = None
-        _proxysql_backend_servers = self.get_nodes_by_hostgroups([hgid, hgid + 8000])
+        # _proxysql_backend_servers = None
+        # _proxysql_backend_servers = self.get_nodes_by_hostgroups([hgid, hgid + 8000])
 
-        count_proxysql_writers = self._get_number_of_backend_nodes_by_hgid(hgid)
-        count_proxysql_config_writers = self._get_number_of_backend_nodes_by_hgid(hgid + 8000)
+        # count_proxysql_writers = self._get_number_of_backend_nodes_by_hgid(hgid)
+        # count_proxysql_config_writers = self._get_number_of_backend_nodes_by_hgid(hgid + 8000)
         main_writer_node:ProxyMysqlDataNode = self._get_main_node_from_pxc(pxc_node_list)
 
-        pxc_writer_is_in = False
-        pxc_writer_config_is_in = False
+        # pxc_writer_is_in = False
+        # pxc_writer_config_is_in = False
 
         proxy_config_purged_w = False
         proxy_config_purged_r = False
@@ -351,7 +421,7 @@ class ProxySQLNode(MysqlNode):
                     logging.warning(f"Preferred writer node {pxc_node.id.hg_id}:{pxc_node.id.server_ip}:{pxc_node.id.server_port} is not present in the ProxySQL HG {hgid}, will add it")
                     # If number of writers is 1 then we will add it and set OFFLINE_SOFT the current one
                     if number_of_writers == 1:
-                        nodes_to_put_offline_soft = self.get_nodes_by_hostgroups([hgid])
+                        nodes_to_put_offline_soft = self.get_nodes_by_hostgroups([hgid,])
                         for node in nodes_to_put_offline_soft.values():
                             self.move_backend_to_offline_soft(node)
 
@@ -646,7 +716,8 @@ class ProxySQLNode(MysqlNode):
         if server_id is not None:
             node = self._get_node_by_id(server_id)
             if node is not None and node.id.hg_id >= 0:
-                return json.dumps(node.to_json())
+                return node.serialize_proxysql_node()
+                # json.dumps(node.to_json())
 
     def config_nodes(self, json_text:str=None,apply:bool=False):
         """
@@ -702,7 +773,7 @@ class ProxySQLNode(MysqlNode):
         buffer = StringIO()
 
         for server in server_list.values():
-            buffer.write(json.dumps(server.to_json(), indent=4, sort_keys=True) + ",\n")
+            buffer.write(server.serialize_proxysql_node() + ",")
 
         json_text_body = buffer.getvalue()
         buffer.close()
