@@ -77,7 +77,7 @@ class PXCCluster:
         self.nodes:Dict[str,PXCNode] = dict()
         self.is_primary:bool = False
         self.proxysql_node:ProxySQLNode = None
-        self.handler:str = handler
+        self._handler:str = handler
         self.number_of_writers: int = 1
 
         if pxc_node.cluster_name is not None and len(pxc_node.cluster_name) > 0:
@@ -110,7 +110,24 @@ class PXCCluster:
         node = PXCNode(uri)
         return PXCCluster(node,addresses)
 
+    def set_handler(self, handler:int=ProxyMysqlDataNode.HANDLER_SCHEDULER):
+        """
+        Handler setter. We also sync the handler on the proxysql node if defined
+        Args:
+            handler: int
+        """
+        _handler = handler
 
+        if self.proxysql_node is not None:
+            self.proxysql_node.handler == self._handler
+
+    def get_handler(self):
+        """
+        Handler getter
+        Returns:int HANDLER constant
+
+        """
+        return self._handler
 
     def discover_nodes(self,addresses:list[str]=None, force:bool=False):
         """
@@ -273,6 +290,7 @@ class PXCCluster:
         from proxysqlpkg.proxysql_obj import ProxySQLNode
         if dbtools.validate_uri(uri):
             self.proxysql_node = ProxySQLNode(uri)
+            self.proxysql_node.handler = self.get_handler()
         else:
             logging.warning("Invalid uri: " + uri)
 
@@ -302,6 +320,8 @@ class PXCCluster:
             - add query rules For 100/101 linked to username. (I am not sure but this is to be consistent with that shit of proxysql-admin)
 
         """
+
+        self.proxysql_node.set_current_cluster_writer_id(hgid)
         proxy_node = self.proxysql_node
         if proxy_node is None or not proxy_node.session.is_connected():
             return Exception("Proxy node cannot be None, or not connected to the ProxySQL server")
@@ -354,7 +374,7 @@ class PXCCluster:
 
         """
         pxc_node_list = self._transform_pxc_nodes_to_proxysql_backend(hgid)
-        self.proxysql_node.reconcile_hostgroup(hgid, pxc_node_list,self.number_of_writers,self.handler)
+        self.proxysql_node.reconcile_hostgroup(hgid, pxc_node_list,self.number_of_writers,self.get_handler())
 
 
     def add_nodes_to_proxy(self, hgid ):
@@ -403,29 +423,29 @@ class PXCCluster:
 
         # In case of Scheduler handler we will build the full server list and if auto is in place try to reconcile
         # If auto is not in place we return that we had reconcile
-        if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
-            _proxysql_backend = self._transform_pxc_nodes_to_proxysql_backend(hgid)
+        # if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+        _proxysql_backend = self._transform_pxc_nodes_to_proxysql_backend(hgid)
 
-            # Refresh backend node in proxysql to be sure we get the last scenario
-            proxy_node.refresh_bakend_nodes()
+        # Refresh backend node in proxysql to be sure we get the last scenario
+        proxy_node.refresh_bakend_nodes()
 
-            check = proxy_node.check_nodes_if_existing(_proxysql_backend, hgid)
-            servers = check["servers"]
-            check_hg = check["hg"]
+        check = proxy_node.check_nodes_if_existing(_proxysql_backend, hgid)
+        servers = check["servers"]
+        check_hg = check["hg"]
 
-            if servers and not check_hg:
-                return {"list": _proxysql_backend, "code": 1}
+        if servers and not check_hg:
+            return {"list": _proxysql_backend, "code": 1}
 
-            elif check_hg and not servers:
-                return {"list": _proxysql_backend, "code": 2}
+        elif check_hg and not servers:
+            return {"list": _proxysql_backend, "code": 2}
 
-            elif check_hg and servers:
-                return {"list": _proxysql_backend, "code": 3}
+        elif check_hg and servers:
+            return {"list": _proxysql_backend, "code": 3}
 
-            return {"list": _proxysql_backend, "code": 0}
+        return {"list": _proxysql_backend, "code": 0}
 
-        else:
-            pass
+        # else:
+        #     pass
 
 
     def _transform_pxc_nodes_to_proxysql_backend(self, hgid:int = 0):
@@ -464,50 +484,34 @@ class PXCCluster:
                 _p_node_bkend_w.main_writer = True
 
             _p_node_bkend_r = ProxyMysqlDataNode(_node, hgid + 1, "r")
-            _p_node_bkend_cw = ProxyMysqlDataNode(_node, hgid + 8000, "c")
-            _p_node_bkend_cr = ProxyMysqlDataNode(_node, hgid + 8001, "c")
+
+            # We set the additional HG only if using the scheduler otherwise we will use the internal table
+            if self.get_handler() == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+                _p_node_bkend_cw = ProxyMysqlDataNode(_node, hgid + 8000, "c")
+                _p_node_bkend_cr = ProxyMysqlDataNode(_node, hgid + 8001, "c")
 
             if _p_node_bkend_w is not None:
                 _proxysql_backend[_p_node_bkend_w.id] = _p_node_bkend_w
 
             _proxysql_backend[_p_node_bkend_r.id] = _p_node_bkend_r
-            _proxysql_backend[_p_node_bkend_cw.id] = _p_node_bkend_cw
-            _proxysql_backend[_p_node_bkend_cr.id] = _p_node_bkend_cr
+
+            # We set the additional HG only if using the scheduler otherwise we will use the internal table
+            if self.get_handler() == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+                _proxysql_backend[_p_node_bkend_cw.id] = _p_node_bkend_cw
+                _proxysql_backend[_p_node_bkend_cr.id] = _p_node_bkend_cr
 
         return _proxysql_backend
 
     def get_hostgroup_ids_by_handler_support(self,hgid:int=0):
         """
         We return a different list of hostgroup id according to the Handler
-        if we use the Scheduler we have:
-            - defined by user (IE 100) for writer(s)
-            - Read defined + 1
-            - Configuration write: defined + 8000
-            - Configuration read: defined + 8001
-
-        if we use the internal support:
-        - defined by user (IE 100) for write
-        - Read defined + 1
-        - Backup_writer: defined + 7000
-        - Offline: defined + 9000
 
         :param hgid:int Hostgroup Id define by user
 
         :return: list of hostgroup id
         """
-        ids = []
-        if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
-            ids.append(Hostgroup(hgid,"w"))
-            ids.append(Hostgroup(hgid + 1, "r"))
-            ids.append(Hostgroup(hgid + 8000, "c"))
-            ids.append(Hostgroup(hgid + 8001, "c"))
 
-        elif self.handler == ProxyMysqlDataNode.HANDLER_INTERNAL:
-            ids.append(Hostgroup(hgid,"w"))
-            ids.append(Hostgroup(hgid + 1, "r"))
-            ids.append(Hostgroup(hgid + 7000, "b"))
-            ids.append(Hostgroup(hgid + 8001, "o"))
-
+        ids = Hostgroup.get_hostgroup_ids_by_handler_support(hgid, self.get_handler())
         return ids
 
     def get_node_by_pxc_name(self,pxc_node_name:str=None):

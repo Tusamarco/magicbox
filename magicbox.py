@@ -3,6 +3,7 @@ import logging
 
 import importlib
 
+from proxysqlpkg.proxysql_obj import ProxySQLCluster, ProxySQLNode, ProxyMysqlDataNode
 from pxcpkg.pxc_obj import PXCCluster
 
 class MagicC:
@@ -50,11 +51,13 @@ class MagicC:
 
     @staticmethod
     def check_all():
-        hgid = 200
+        hgid:int = 200
         # processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
         #cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@10.211.55.5:3307",["10.211.55.5:3307","10.211.55.5:3308","10.211.55.5:3309"])
         cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@192.168.4.205:3306",
                                                          ["192.168.4.231","192.168.4.205","192.168.4.21"])
+        # cluster.handler = ProxyMysqlDataNode.HANDLER_INTERNAL
+
         # cluster.discover_nodes(["192.168.4.231","192.168.4.205","192.168.4.21"])
         # cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
         # cluster.connect_proxysql_node("cluster1:clusterpass@10.211.55.5:6032")
@@ -86,12 +89,13 @@ class MagicC:
 
         hgsid:list = cluster.get_hostgroup_ids_by_handler_support(hgid)
         json_request=[]
-        for hgid in hgsid:
-            json_request.append(hgid.hg_id)
+        for hgid_obj in hgsid:
+            json_request.append(hgid_obj.hg_id)
 
         print(cluster.proxysql_node.get_json_by_hostgroups(json_request))
         pxc = cluster.get_node_by_pxc_name("node1")
-        backend = cluster.get_Proxysql_backend_by_pxc_name("node2",101)
+
+        backend = cluster.get_Proxysql_backend_by_pxc_name("node2",hgid + 1)
 
         print(pxc.pxc_node_name + " " + pxc.pxc_ip + ":"+ pxc.pxc_port)
         if backend is not None:

@@ -27,7 +27,79 @@ class Hostgroup:
        c catalog = hg unmutable setting IE 8000 + hg_id
        o offline = hg maontenance IE 9000 + hg_id
 
+    The convention is the following:
+        given a writer ID x, Reader is X + 1; Catalog is Writer/Reader + 8000; Oflline Writer/Reader + 9000
+
     """
+
+    @staticmethod
+    def identify_hg_role(hgid_main_writer,hgid,handler:int):
+        """
+        Identify the hg type based on the convention defined in the class definition
+        Args:
+            hgid_main_writer: the writer HG id
+            hgid: the id of the node we need to identify
+            handler: the handler that will be used ti manage the cluster on proxysql
+
+        Returns:str type identifier
+
+        """
+
+        if hgid_main_writer == 0:
+            return ""
+
+        _code = hgid - hgid_main_writer
+        if _code == 0:
+            return "w"
+        if _code == 1:
+            return "r"
+        if _code == 8000:
+            if handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+                return "c"
+            else:
+                return "b"
+
+        if _code == 9000 or _code == 7000:
+            return "o"
+
+
+        return ""
+
+
+    @staticmethod
+    def get_hostgroup_ids_by_handler_support(hgid:int=0, handler:int = 0):
+        """
+        We return a different list of hostgroup id according to the Handler
+        if we use the Scheduler we have:
+            - defined by user (IE 100) for writer(s)
+            - Read defined + 1
+            - Configuration write: defined + 8000
+            - Configuration read: defined + 8001
+
+        if we use the internal support:
+        - defined by user (IE 100) for writing
+        - Read defined + 1
+        - Backup_writer: defined + 8000
+        - Offline: defined + 7000
+
+        :param hgid:int Hostgroup Id define by user
+
+        :return: list of hostgroup id
+        """
+        ids = []
+        if handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+            ids.append(Hostgroup(hgid,"w"))
+            ids.append(Hostgroup(hgid + 1, "r"))
+            ids.append(Hostgroup(hgid + 8000, "c"))
+            ids.append(Hostgroup(hgid + 8001, "c"))
+
+        elif handler == ProxyMysqlDataNode.HANDLER_INTERNAL:
+            ids.append(Hostgroup(hgid,"w"))
+            ids.append(Hostgroup(hgid + 1, "r"))
+            ids.append(Hostgroup(hgid + 7000, "o"))
+            ids.append(Hostgroup(hgid + 8000, "b"))
+
+        return ids
 
     def __init__(self, hg_id: int = 0, hg_type: str = "r"):
         self.hg_id = hg_id
@@ -39,8 +111,17 @@ class Hostgroup:
         self.is_active = False
         self.max_writers = 1
         self.is_writer_is_also_reader = True
+        self.set_role(hg_type)
 
-        # Match is not supported
+    def set_role(self, hg_type:str="r"):
+        """
+        Set the type of HG base on the code and the defined convention
+        Args:
+            hg_type:
+
+        Returns: void
+
+        """
         match hg_type:
             case "w":
                 self.is_writer = True
@@ -77,10 +158,6 @@ class ProxyMysqlDataNode(MysqlNode):
    def serialize_proxysql_node(self) -> str:
        """
        Converts a ProxyMysqlDataNode instance into a JSON string representation.
-
-       Args:
-           node_instance: An instance of the ProxyMysqlDataNode class.
-
        Returns:
            A JSON formatted string representing the instance's attributes.
        """
@@ -235,7 +312,27 @@ class ProxySQLNode(MysqlNode):
         # Config          *global.Configuration
         self.pingTimeout    = 0
         # Initialize the nodes existing
+        self._current_cluster_writer_id = 0
+        self.handler = ProxyMysqlDataNode.HANDLER_SCHEDULER
         self._load_back_end_nodes()
+
+
+    def set_current_cluster_writer_id(self,hgid:int):
+        """
+        Set the active cluster ID.
+        A ProxySQL server instance can deal with ONE cluster writer id a time
+        Args:
+            hgid:
+
+        Returns:
+
+        """
+        self._current_cluster_writer_id = hgid
+        self._identify_hostgroup_role_based_on_main_writer_hgid()
+
+
+    def get_current_cluster_writer_id(self):
+        return self._current_cluster_writer_id
 
     def _load_back_end_nodes(self):
         """
@@ -245,6 +342,7 @@ class ProxySQLNode(MysqlNode):
         We also do not care if we load all the nodes and they are not relevant because we still do not know.
         Once we have reconciled with the PXC cluster, then only the node currently available for that cluster will be part of the visible backend nodes
 
+        However, we need to respect/follow a convention to identify the
         Returns: Void
 
         """
@@ -268,6 +366,19 @@ class ProxySQLNode(MysqlNode):
     def refresh_bakend_nodes(self):
         self.mysql_nodes = {}
         self._load_back_end_nodes()
+        self._identify_hostgroup_role_based_on_main_writer_hgid()
+
+    def _identify_hostgroup_role_based_on_main_writer_hgid(self):
+        if self._current_cluster_writer_id == 0:
+            return
+
+        for node in self.mysql_nodes.values():
+            hgcode = Hostgroup.identify_hg_role(self._current_cluster_writer_id,node.id.hg_id, self.handler)
+            if hgcode != "":
+                node.hostgroup.set_role(hgcode)
+
+
+
 
     def check_nodes_if_existing(self, incoming_bck_nodes:dict[ServerId]={},hgid:int=0,force:bool=False ):
         """
@@ -290,6 +401,7 @@ class ProxySQLNode(MysqlNode):
         """
         already_present = []
         hg_exists = False
+        # Loop the incoming server list and compare with the backend nodes in Proxysql
         for server in self.mysql_nodes.keys():
 
             if server.hg_id == hgid:
@@ -299,11 +411,6 @@ class ProxySQLNode(MysqlNode):
                 if node.server_ip == server.server_ip and node.server_port == server.server_port and node.hg_id == server.hg_id:
                     already_present.append(f"Node {node.server_ip} Port: {node.server_port} hostgroup_id: {node.hg_id}")
 
-                    ## NOT HERE here we just check no action
-                    # # IF Force is True we flag the node in the Proxysql Server for deletion
-                    # self.mysql_nodes[server].action_list.append(ProxyMysqlDataNode.ACTION_DELETE)
-                    # # At the same time we mark the node in the incoming list for INSERT
-                    # incoming_bck_nodes[node].action_list.append(ProxyMysqlDataNode.ACTION_INSERT)
                     break
 
         if len(already_present) > 0:
@@ -780,3 +887,72 @@ class ProxySQLNode(MysqlNode):
         return json_text_head + json_text_body + json_text_tail
 
 
+    def setup_cluster_manager(self, hgids:list=None):
+        if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+            scheduler_id = "{ hgW:" + str(self.get_current_cluster_writer_id()) + ", hgR:" + str(
+            self.get_current_cluster_writer_id() + 1) + " }"
+
+            try:
+                # First, we check if the scheduler is already defined in the scheduler table
+                cursor = self.session.cursor(dictionary=True)
+                sql = f"select * from scheduler where comment = '{scheduler_id}'"
+                cursor.execute(sql)
+                if cursor.rowcount > 0 and cursor.rowcount < 2:
+                    rows = cursor.fetchall()
+                    id = 0
+                    for row in rows:
+                        id = row["id"]
+                    logging.warning("Scheduler already define, please manage it with update/delete/activate/deactivate methods")
+                    logging.warning(row)
+                    return
+
+                elif cursor.rowcount < 1:
+                    logging.error(f"We have multiple entries in the scheduler matching the id {scheduler_id}. This is not fixable, please check if there is some refuse from previous installations and clen it")
+                    return
+            except:
+                raise Exception("Error while checking scheduler")
+
+            # If we reach this, it means no entry in the scheduler so we can add it
+            # TODO: find a way to [ass the parameters about the binary location and the config file
+            # Also I need to be able to write the config file based on a template fillign it with some parameters
+            sql = (f"INSERT  INTO scheduler (active,interval_ms,filename,arg1,arg2,comment) values" +
+                   f" (0,2000,'/var/lib/proxysql/proxysql_scheduler/proxysql_checker','--configfile=config.toml','--configpath=/var/lib/proxysql/',{scheduler_id})")
+            try:
+                cursor = self.session.cursor(dictionary=True)
+                cursor.execute(sql)
+
+            except:
+                raise Exception(f"Error while Inserting a new scheduler scheduler id: {scheduler_id}")
+
+        else:
+            # We now need to setup the internal galera support
+            host_groups:[Hostgroup] = Hostgroup.get_hostgroup_ids_by_handler_support(self.get_current_cluster_writer_id(),self.handler)
+            writer_id = 0
+            reader_id = 0
+            writer_bck_id = 0
+            offline_id = 0
+
+            for host_group in host_groups:
+                if host_group.is_writer:
+                    writer_id = host_group.hg_id
+
+                if host_group.is_reader:
+                    reader_id = host_group.hg_id
+
+                if host_group.is_offline:
+                    offline_id = host_group.hg_id
+
+                if host_group.is_backup:
+                    writer_bck_id = host_group.hg_id
+
+            # Let us check if there is already a definition for this cluster
+# TODO ... Continue to finish this method
+
+            sql= ("INSERT INTO mysql_galera_hostgroups (writer_hostgroup,backup_writer_hostgroup,reader_hostgroup,offline_hostgroup,active,max_writers,writer_is_also_reader,max_transactions_behind) " +
+                  f"VALUES ({writer_id},{writer_bck_id},{reader_id},{offline_id},0,1,1,100)")
+
+    def activate_cluster_manager(self,hgids:list=None):
+        pass
+
+    def deactivate_cluster_manager(self,hgids:list=None):
+        pass
