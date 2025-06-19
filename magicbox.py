@@ -28,35 +28,18 @@ class MagicC:
         # pass
         # self.pxcprocessor = pxcprocessor.PXCProcessor()
 
-    def create_pxc_processor(uri):
-        """
-        Create the PXCProcessor Object.
-
-        Args:
-            uri (string): Connection uri to any PXC node part of the cluster.
-
-        Returns:
-            The newly created PXC Processor object
-        """
-        processor = pxcprocessor.Pxc_processor(uri)
-        return processor
-        # return{
-        #     'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
-        #     'getPXCcluster': lambda: processor.get_pxc_cluster(),
-        #     'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
-        #     'setProxySQL': lambda uri="": processor.set_proxysql_node(uri),
-        #     'getProxySQL': lambda: processor.get_proxy_sql_node(),
-        #
-        # }
 
     @staticmethod
     def check_all():
         hgid:int = 200
         # processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
         #cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@10.211.55.5:3307",["10.211.55.5:3307","10.211.55.5:3308","10.211.55.5:3309"])
+
+
         cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@192.168.4.205:3306",
                                                          ["192.168.4.231","192.168.4.205","192.168.4.21"])
-        # cluster.handler = ProxyMysqlDataNode.HANDLER_INTERNAL
+        cluster.set_handler(ProxyMysqlDataNode.HANDLER_INTERNAL)
+        cluster.number_of_writers = 1
 
         # cluster.discover_nodes(["192.168.4.231","192.168.4.205","192.168.4.21"])
         # cluster:PXCCluster = processor.set_pxc_cluster(None,["192.168.4.231","192.168.4.205","192.168.4.21"])
@@ -64,8 +47,18 @@ class MagicC:
         cluster.connect_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
         # proxy = processor.set_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
         cluster.add_cluster_to_proxysql(hgid,False)
+
         cluster.reconcile_cluster(hgid)
 
+        cluster.proxysql_node.delete_cluster(None,True)
+
+        cluster.number_of_writers = 2
+
+        cluster.add_cluster_to_proxysql(hgid,False)
+
+        cluster.put_cluster_offline()
+
+        cluster.put_cluster_onine()
         # processor.close_connections()
 
         # json_text = '''
@@ -82,10 +75,12 @@ class MagicC:
           "max_latency_ms": "0", "comment": "Primary Writer"},
          {"id":{"hg_id": 8201, "server_ip": "192.168.4.205", "server_port": 3306}, "gtid_port": "0", "status": "ONLINE",
          "weight": "997", "compression": "0", "max_connections": "2000", "max_replication_lag": "0", "use_ssl": "1",
-         "max_latency_ms": "0", "comment": "Not Primary Reader"}]}}
+         "max_latency_ms": "0", "comment": "Not Primary Reader"}
+         ]}}
          '''
 
-        cluster.proxysql_node.config_nodes(json_text)
+        modified_nodes =  cluster.proxysql_node.config_nodes(json_text)
+        cluster.proxysql_node.update_nodes(modified_nodes,True)
 
         hgsid:list = cluster.get_hostgroup_ids_by_handler_support(hgid)
         json_request=[]
@@ -101,6 +96,14 @@ class MagicC:
         if backend is not None:
             print(str(backend.id.hg_id) + " " + backend.id.server_ip + ":" + str(backend.id.server_port))
             print(backend.serialize_proxysql_node())
+
+
+        cluster.proxysql_node.setup_cluster_manager()
+        cluster.proxysql_node.activate_cluster_manager()
+        cluster.proxysql_node.deactivate_cluster_manager()
+        cluster.proxysql_node.delete_cluster_manager()
+
+        cluster.proxysql_node.delete_cluster(None,True)
 
 
         cluster.close_connections()

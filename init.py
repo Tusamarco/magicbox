@@ -1,6 +1,9 @@
 # init.py
 # -------
 import importlib
+
+import magicbox
+
 try:
     import mysqlsh
     from mysqlsh.plugin_manager import plugin, plugin_function
@@ -13,7 +16,7 @@ import logging
 
 # Configure basic logging (console output)
 logging.basicConfig(
-    level=logging.WARNING,  # Minimum level to log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    level=logging.DEBUG,  # Minimum level to log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     # format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
     format='[%(levelname)s] - %(message)s',  # Log format
     handlers=[logging.StreamHandler()]  # Log to console
@@ -148,4 +151,7 @@ def create_pxc_processor(uri):
 
     }
 
-# print("wait")
+from magicbox import MagicC
+@plugin_function("magicbox.checkAll")
+def check_all():
+    MagicC.check_all()

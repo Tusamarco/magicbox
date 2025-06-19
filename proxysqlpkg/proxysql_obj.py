@@ -3,7 +3,11 @@
 """
 import logging
 from io import StringIO
+from logging import exception
 from typing import Dict
+
+from numpy.f2py.auxfuncs import applyrules
+
 from common import utils_mb
 from mysqlpkg.mysql_obj import MysqlNode
 
@@ -226,7 +230,7 @@ class ProxyMysqlDataNode(MysqlNode):
 
         self.hostgroup:Hostgroup = Hostgroup(hgid,hgtype)
         self.gtid_port:int = 0
-        self.status:str = ""
+        self.status:str = "ONLINE"
         self.weight:int = 1000
         self.compression:bool = False
         self.max_connections:int = 2000
@@ -286,6 +290,9 @@ class ProxySQLNode(MysqlNode):
     """
     ProxySQL Object.
     """
+
+    VALID_BACKEND_STATE=['ONLINE','OFFLINE_SOFT','OFFLINE_HARD']
+
     def __init__(self,uri=False):
         """
         Returns a ProxySQL Node object, this object represent a ProxySQL server instance
@@ -334,6 +341,7 @@ class ProxySQLNode(MysqlNode):
     def get_current_cluster_writer_id(self):
         return self._current_cluster_writer_id
 
+
     def _load_back_end_nodes(self):
         """
         This is an action at __init__
@@ -346,7 +354,7 @@ class ProxySQLNode(MysqlNode):
         Returns: Void
 
         """
-        sql = ("select * from runtime_mysql_servers")
+        sql = ("select * from mysql_servers")
         cursor = self.session.cursor(dictionary=True)
         cursor.execute(sql)
         mysql_servers = cursor.fetchall()
@@ -475,7 +483,7 @@ class ProxySQLNode(MysqlNode):
         return False
         
 
-    def reconcile_hostgroup(self,hgid:int=0,pxc_node_list:dict=None,number_of_writers:int=0,pxc_handler:int=1):
+    def reconcile_hostgroup(self,hgid:int=0,pxc_node_list:dict=None,number_of_writers:int=0):
         """
         Here the logic is a bit more complex.
         We need to keep in mind that we should never disrupt production service, so also if we 1 writer and that writer at the moment of reconcile
@@ -491,18 +499,6 @@ class ProxySQLNode(MysqlNode):
         # First, we process the writers
         if number_of_writers==0:
             number_of_writers = 1
-
-        """
-        We check if Main node is in the writer(s), if more then 1 writer we just add it, if 1 writer, we put ofline_soft the current writer and insert the new writer (main Node)
-        then process reads and backends.
-        For reads and backend we just delete them and reload. 
-        
-        ******* WARNING ******
-        I do not recall if ProxySQL is smart enough when copy the server to runtime to DO NOT close the connections to the servers if they are the same ip:password:hg or if instead they 
-        are disconnected.
-        If they are need to revisit the approach.
-        TODO 
-        """
 
         # Get the list of nodes related to the writer
         # _proxysql_backend_servers = None
@@ -533,42 +529,23 @@ class ProxySQLNode(MysqlNode):
                             self.move_backend_to_offline_soft(node)
 
                     #  then we add the writer if missed
-                    self.insert_backend(pxc_node)
+                    self.update_backend(pxc_node)
 
             # let us now check the 8000 group
             if pxc_node.id.hg_id == (hgid + 8000):
-                nodes_to_remove = self.get_nodes_by_hostgroups([hgid + 8000])
-                if not proxy_config_purged_w:
-                    proxy_config_purged_w = True
-                    for node in nodes_to_remove.values():
-                        self.delete_backend(node)
-
-                self.insert_backend(pxc_node)
+                self.update_backend(pxc_node)
 
             # let us now check the hgid + 1 (reader) group
             if pxc_node.id.hg_id == (hgid + 1):
-                nodes_to_remove = self.get_nodes_by_hostgroups([hgid + 1])
-                if not proxy_purged_r:
-                    proxy_purged_r = True
-                    for node in nodes_to_remove.values():
-                        self.delete_backend(node)
-
-                self.insert_backend(pxc_node)
+                self.update_backend(pxc_node)
 
             # let us now check the 8000 (reader) group
             if pxc_node.id.hg_id == (hgid + 8001):
-                nodes_to_remove = self.get_nodes_by_hostgroups([hgid + 8001])
-                if not proxy_config_purged_r:
-                    proxy_config_purged_r = True
-                    for node in nodes_to_remove.values():
-                        self.delete_backend(node)
-
-                self.insert_backend(pxc_node)
+                self.update_backend(pxc_node)
 
         self.apply_backend()
+        self.refresh_bakend_nodes()
 
-        # Now If we use native galera support
-        pass
 
     def _get_number_of_backend_nodes_by_hgid(self, hgid):
         """
@@ -735,8 +712,8 @@ class ProxySQLNode(MysqlNode):
             cursor = self.session.cursor(dictionary=False)
             sql = (f"update mysql_servers set " +
                    f"weight={node.weight},max_connections={node.max_connections},use_ssl={node.use_ssl},comment='{node.comment}'," +
-                   f"gtid_port={node.gtid_port},status={node.status},weight={node.weight},compression={node.compression}," +
-                   f"max_replication_lag={node.max_replication_lag},max_latency_ms={node.max_latency_ms}" +
+                   f"gtid_port={node.gtid_port},status='{node.status}',weight={node.weight},compression={node.compression}," +
+                   f"max_replication_lag={node.max_replication_lag},max_latency_ms={node.max_latency_ms} " +
                    f"where hostname='{node.id.server_ip}' and hostgroup_id = {node.id.hg_id} and port = {node.id.server_port}")
             cursor.execute(sql)
 
@@ -796,6 +773,7 @@ class ProxySQLNode(MysqlNode):
             raise Exception("List of hostgroup id to reconcile is None")
 
         for server in self.mysql_nodes.values():
+            # for hgid in hgisd:
             if server.id.hg_id in hgisd:
                 proxysql_backend_by_hg[server.id] = server
 
@@ -826,14 +804,15 @@ class ProxySQLNode(MysqlNode):
                 return node.serialize_proxysql_node()
                 # json.dumps(node.to_json())
 
-    def config_nodes(self, json_text:str=None,apply:bool=False):
+    def config_nodes(self, json_text:str=None):
         """
         The method will configure the nodes as for the Json provided
+        The nodes will be modified ONLY in the ProxySQLServer instance and not on the ProxySQL server DB
         :param json_text:JSON
-        :param apply:Boolean if true changes will be applied directly, false otherwise you need to explicitly apply the changes to the ProxySQL instance
 
-        :return void
+        :return List of modified nodes
         """
+        return_node_list = []
         if json_text is not None:
             data = json.loads(json_text)
             if data["cluster"] is not None:
@@ -848,11 +827,15 @@ class ProxySQLNode(MysqlNode):
                                     for key in ProxyMysqlDataNode.JSON_CONFIGURABLE:
                                         if key in node_conf:
                                             setattr(node, key, node_conf[key])
+                                    return_node_list.append(node)
+                                    # No this method is only to Update the node in Proxysql instance not to save it to disk
+                                    # self.update_backend(node)
 
-                    if apply:
-                        self.apply_backend()
+                    # if apply:
+                    #     self.apply_backend()
                 except Exception as e:
                     logging.error(e)
+        return return_node_list
 
     def get_json_by_hostgroups(self,ids:list=None):
         """
@@ -887,72 +870,366 @@ class ProxySQLNode(MysqlNode):
         return json_text_head + json_text_body + json_text_tail
 
 
-    def setup_cluster_manager(self, hgids:list=None):
+    def setup_cluster_manager(self, apply:bool = True):
+        """
+        The method will setup the cluster manager, setting up the scheduler or the ProxySQL internal support.
+        We cannot have both active
+        Args:
+            None
+        Returns:void
+        Raises: current_cluster_writer_id not define
+        """
+        if self.get_current_cluster_writer_id() == 0:
+            logging.error("Setting up cluster manager cannot be done without define first the Preferred cluster writer id ")
+            raise exception("current_cluster_writer_id not define. The ProxySQL instance does not have a Cluster associated, have you execute <pxc_cluster>.add_cluster_to_proxysql()?")
+
+        pxc_manager_id = self._get_pxc_manager_id()
+
+        logging.info(f"Set up cluster manager id: {pxc_manager_id} [START]")
         if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
-            scheduler_id = "{ hgW:" + str(self.get_current_cluster_writer_id()) + ", hgR:" + str(
-            self.get_current_cluster_writer_id() + 1) + " }"
-
-            try:
-                # First, we check if the scheduler is already defined in the scheduler table
-                cursor = self.session.cursor(dictionary=True)
-                sql = f"select * from scheduler where comment = '{scheduler_id}'"
-                cursor.execute(sql)
-                if cursor.rowcount > 0 and cursor.rowcount < 2:
-                    rows = cursor.fetchall()
-                    id = 0
-                    for row in rows:
-                        id = row["id"]
-                    logging.warning("Scheduler already define, please manage it with update/delete/activate/deactivate methods")
-                    logging.warning(row)
-                    return
-
-                elif cursor.rowcount < 1:
-                    logging.error(f"We have multiple entries in the scheduler matching the id {scheduler_id}. This is not fixable, please check if there is some refuse from previous installations and clen it")
-                    return
-            except:
-                raise Exception("Error while checking scheduler")
-
-            # If we reach this, it means no entry in the scheduler so we can add it
-            # TODO: find a way to [ass the parameters about the binary location and the config file
-            # Also I need to be able to write the config file based on a template fillign it with some parameters
-            sql = (f"INSERT  INTO scheduler (active,interval_ms,filename,arg1,arg2,comment) values" +
-                   f" (0,2000,'/var/lib/proxysql/proxysql_scheduler/proxysql_checker','--configfile=config.toml','--configpath=/var/lib/proxysql/',{scheduler_id})")
-            try:
-                cursor = self.session.cursor(dictionary=True)
-                cursor.execute(sql)
-
-            except:
-                raise Exception(f"Error while Inserting a new scheduler scheduler id: {scheduler_id}")
-
+            self._setup_scheduler(pxc_manager_id,apply)
         else:
-            # We now need to setup the internal galera support
-            host_groups:[Hostgroup] = Hostgroup.get_hostgroup_ids_by_handler_support(self.get_current_cluster_writer_id(),self.handler)
-            writer_id = 0
-            reader_id = 0
-            writer_bck_id = 0
-            offline_id = 0
+            self._setup_galera_internal(pxc_manager_id,apply)
 
-            for host_group in host_groups:
-                if host_group.is_writer:
-                    writer_id = host_group.hg_id
+        logging.info(f"Set up cluster manager id: {pxc_manager_id} [END]")
 
-                if host_group.is_reader:
-                    reader_id = host_group.hg_id
+    def _get_pxc_manager_id(self):
+        """
+        Internal method that returns the string representation of the cluster id to be used in the manager configuration
+        Returns:str manager id
+        """
+        pxc_manager_id = "{ hgW:" + str(self.get_current_cluster_writer_id()) + ", hgR:" + str(
+            self.get_current_cluster_writer_id() + 1) + " }"
+        return pxc_manager_id
 
-                if host_group.is_offline:
-                    offline_id = host_group.hg_id
+    def _setup_scheduler(self,pxc_manager_id, apply:bool = False):
+        """
+        Specifically, set the scheduler manager
+        Args:
+            pxc_manager_id:
 
-                if host_group.is_backup:
-                    writer_bck_id = host_group.hg_id
+        Returns: void
 
-            # Let us check if there is already a definition for this cluster
-# TODO ... Continue to finish this method
+        """
+        try:
+            # First, we check if the scheduler is already defined in the scheduler table
+            cursor = self.session.cursor(dictionary=True)
+            sql = f"select * from scheduler where comment = '{pxc_manager_id}'"
+            exists, row_count = self._test_for_active_manager(sql)
 
-            sql= ("INSERT INTO mysql_galera_hostgroups (writer_hostgroup,backup_writer_hostgroup,reader_hostgroup,offline_hostgroup,active,max_writers,writer_is_also_reader,max_transactions_behind) " +
-                  f"VALUES ({writer_id},{writer_bck_id},{reader_id},{offline_id},0,1,1,100)")
+            if 0 < row_count < 2:
+                logging.warning(
+                    f"Scheduler already define (id:{pxc_manager_id}), please manage it with update/delete/activate/deactivate methods")
+                return
 
-    def activate_cluster_manager(self,hgids:list=None):
-        pass
+            elif row_count == 1:
+                logging.error(
+                    f"We have multiple entries in the scheduler matching the id {pxc_manager_id}. This is not fixable, please check if there is some refuse from previous installations and clen it")
+                return
+        except:
+            raise Exception("Error while checking scheduler")
 
-    def deactivate_cluster_manager(self,hgids:list=None):
-        pass
+        # If we reach this, it means no entry in the scheduler so we can add it
+        # TODO: find a way to pass the parameters about the binary location and the config file
+        # Also I need to be able to write the config file based on a template fillign it with some parameters
+        sql = (f"INSERT  INTO scheduler (active,interval_ms,filename,arg1,arg2,comment) values" +
+               f" (0,2000,'/var/lib/proxysql/proxysql_scheduler/proxysql_checker','--configfile=config.toml','--configpath=/var/lib/proxysql/','{pxc_manager_id}')")
+
+        self._execute_sql(sql)
+        if apply:
+            self._execute_sql("LOAD SCHEDULER TO RUNTIME")
+            self._execute_sql("SAVE SCHEDULER TO DISK")
+
+        logging.info("Scheduler setup complete, but not active")
+
+    def _setup_galera_internal(self,pxc_manager_id, apply:bool = False):
+        """
+        Specifically, set the ProxySQL internal manager
+        Args:
+            pxc_manager_id:
+
+        Returns: void
+
+        """
+        # We now need to setup the internal galera support
+        host_groups: [Hostgroup] = Hostgroup.get_hostgroup_ids_by_handler_support(self.get_current_cluster_writer_id(),self.handler)
+        writer_id = 0
+        reader_id = 0
+        writer_bck_id = 0
+        offline_id = 0
+
+        for host_group in host_groups:
+            if host_group.is_writer:
+                writer_id = host_group.hg_id
+
+            if host_group.is_reader:
+                reader_id = host_group.hg_id
+
+            if host_group.is_offline:
+                offline_id = host_group.hg_id
+
+            if host_group.is_backup:
+                writer_bck_id = host_group.hg_id
+
+        # Let us check if there is already a definition for this cluster
+        sql = (f"select * from mysql_galera_hostgroups where (writer_hostgroup={writer_id} and " +
+               f"backup_writer_hostgroup={writer_bck_id} and reader_hostgroup={reader_id} and offline_hostgroup={offline_id}) or comment='{pxc_manager_id}'")
+
+        exists,row_count = self._test_for_active_manager(sql)
+
+        if 0 < row_count < 2:
+            logging.warning(
+                f"PXC support already define in the mysql_galera_hostgroup table, please manage it with update/delete/activate/deactivate methods")
+            return
+
+        elif row_count > 1:
+            logging.error(
+                f"We have multiple entries in mysql_galera_hostgroup matching the id {pxc_manager_id}. This is not fixable, please check if there is some refuse from previous installations and clen it")
+            return
+
+        # If we reach this it means that no entry in the mysql_galera_hostgroup so we cna go ahead and insert
+        sql = ("INSERT INTO mysql_galera_hostgroups (writer_hostgroup,backup_writer_hostgroup,reader_hostgroup," +
+               "offline_hostgroup,active,max_writers,writer_is_also_reader,max_transactions_behind,comment) " +
+               f"VALUES ({writer_id},{writer_bck_id},{reader_id},{offline_id},0,1,1,100,'{pxc_manager_id}')")
+
+        self._execute_sql(sql)
+        if apply:
+            self.apply_backend()
+
+    def activate_cluster_manager(self, apply:bool = True):
+        """
+        Method to activate the PXC manager
+
+        Returns: void
+        """
+        logging.info(f"Activate cluster manager id: {self._get_pxc_manager_id()} [START]")
+
+        _sql = ""
+        if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+            # First we check if there is an internal manager active if not we activate it
+            _sql = f"select * from mysql_galera_hostgroups where active=1 and writer_hostgroup={self._current_cluster_writer_id}"
+        else:
+            _sql =f"select * from scheduler where comment={self._current_cluster_writer_id}"
+
+        exists, rows = self._test_for_active_manager(_sql)
+
+        if exists:
+            logging.error(f"Cannot activate a manager instance already exists for cluster id:{self._get_pxc_manager_id()}")
+        else:
+            if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+                self._execute_sql(f"update scheduler set active=1 where comment='{self._get_pxc_manager_id()}'")
+                if apply:
+                    self._execute_sql("LOAD SCHEDULER TO RUNTIME")
+                    self._execute_sql("SAVE SCHEDULER TO DISK")
+            else:
+                self._execute_sql(f"update mysql_galera_hostgroups set active=1 where writer_hostgroup={self.get_current_cluster_writer_id()}")
+                if apply:
+                    self.apply_backend()
+
+        logging.info(f"Activate cluster manager id: {self._get_pxc_manager_id()} [END]")
+
+    def deactivate_cluster_manager(self,apply:bool = True):
+        """
+        Method to deactivate the PXC Manger
+        Returns: void
+
+        """
+        logging.info(f"Deactivate cluster manager id: {self._get_pxc_manager_id()} [START]")
+
+        if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+            self._execute_sql(f"update scheduler set active=0 where comment='{self._get_pxc_manager_id()}'")
+            if apply:
+                self._execute_sql("LOAD SCHEDULER TO RUNTIME")
+                self._execute_sql("SAVE SCHEDULER TO DISK")
+        else:
+            self._execute_sql(
+                f"update mysql_galera_hostgroups set active=0 where writer_hostgroup={self.get_current_cluster_writer_id()}")
+            if apply:
+                self.apply_backend()
+
+        logging.info(f"Deactivate cluster manager id: {self._get_pxc_manager_id()} [END]")
+
+    def delete_cluster_manager(self, apply:bool = True):
+        """
+        Remove the PXC Manager
+        Args:
+            apply: bool True
+
+        Returns: void
+
+        """
+        logging.info(f"Removing cluster manager id: {self._get_pxc_manager_id()} [START]")
+
+        if self.handler == ProxyMysqlDataNode.HANDLER_SCHEDULER:
+            self._execute_sql(f"delete from scheduler where comment='{self._get_pxc_manager_id()}'")
+            if apply:
+                self._execute_sql("LOAD SCHEDULER TO RUNTIME")
+                self._execute_sql("SAVE SCHEDULER TO DISK")
+        else:
+            self._execute_sql(
+                f"delete from mysql_galera_hostgroups where writer_hostgroup={self.get_current_cluster_writer_id()}")
+            if apply:
+                self.apply_backend()
+
+        logging.info(f"Removing cluster manager id: {self._get_pxc_manager_id()} [END]")
+
+    def delete_cluster(self,nodes:dict[ServerId:ProxyMysqlDataNode] = None, apply:bool = False):
+        """
+        Method to delete a set of nodes.
+        If not set is pass then it will delete the current active cluster
+        Args:
+            nodes:
+
+        Returns:
+
+        """
+        logging.info(f"Delete cluster id: {self._get_pxc_manager_id()} [START]")
+
+        if nodes is None:
+            nodes = self.get_active_cluster_nodes()
+
+        if nodes is None or len(nodes) == 0:
+            logging.error(f"Error looking for the nodes to delete with HG id:{self.get_current_cluster_writer_id()}")
+
+        if self.get_current_cluster_writer_id() == 0:
+            logging.error("Cannot delete the cluster missing Preferred cluster writer id ")
+            raise exception("current_cluster_writer_id not define. The ProxySQL instance does not have a Cluster associated, have you execute <pxc_cluster>.add_cluster_to_proxysql()?")
+
+        for node in nodes:
+            sql = f"delete from mysql_servers where hostname = '{node.id.server_ip}' and port = '{node.id.server_port}' and hostgroup_id = {node.id.hg_id}"
+            logging.debug(sql)
+            self._execute_sql(sql)
+
+        if apply:
+            self.apply_backend()
+
+        # Also cleanup the manager
+        self.delete_cluster_manager()
+        logging.info(f"Delete cluster id: {self._get_pxc_manager_id()} [END]")
+
+    def update_nodes(self,modified_nodes:[ProxyMysqlDataNode] = None, apply:bool = False):
+        """
+        Update on mysql_servers table the list of nodes
+        Args:
+            modified_nodes:
+            apply: bool Default False
+
+        Returns:
+
+        """
+        if modified_nodes is None or len(modified_nodes) == 0:
+            return
+
+        for node in modified_nodes:
+            self.update_backend(node)
+
+        if apply:
+            self.apply_backend()
+
+
+    def _test_for_active_manager(self,sql):
+        """
+        Internal function to test a generic sql returning rows
+        Args:
+            sql:str The sql to run to check the manager
+        Returns:
+            bool: True if there are rows False if not
+            int: number of rows
+
+        """
+        try:
+            cursor = self.session.cursor(dictionary=True)
+            cursor.execute(sql)
+            cursor.fetchall()
+            rows_number = cursor.rowcount
+            if rows_number > 0:
+                return True,rows_number
+            return False,0
+
+        except:
+            raise Exception()
+
+
+    def _execute_sql(self,sql):
+        """
+        Internal method to execute SQL command on the ProxySQL instance
+        Args:
+            sql: SQL to execute
+
+        Returns: none
+        Exceptions: Generic Exception()
+
+        """
+        try:
+            cursor = self.session.cursor(dictionary=False)
+            cursor.execute(sql)
+            return cursor.rowcount
+        except:
+            raise Exception()
+
+    def get_active_cluster_nodes(self):
+        """
+        This method return a list wit all the nodes related to the current active writer
+        Returns: List of ProxyMysqlDataNode
+
+        """
+
+        hostgroup_ids = Hostgroup.get_hostgroup_ids_by_handler_support(self.get_current_cluster_writer_id(),self.handler)
+
+        # We need to transform the Hosgroup list into int list
+        hostgroup_ids_lookup = []
+        for hostgroup_id in hostgroup_ids:
+            hostgroup_ids_lookup.append(hostgroup_id.hg_id)
+
+        found_nodes = []
+        nodes_to_put_offline_soft = self.get_nodes_by_hostgroups(hostgroup_ids_lookup)
+        for node in nodes_to_put_offline_soft.values():
+            found_nodes.append(node)
+
+        # found_nodes = self.get_nodes_by_hostgroups(hostgroup_ids_lookup)
+        if found_nodes is None or len(found_nodes) == 0  :
+            return None
+
+        return found_nodes
+
+    def add_backend_nodes(self,nodes_list:[ProxyMysqlDataNode]=None, apply:bool = False):
+        """
+        Inserting nodes in the mysql_server table
+        Args:
+            nodes_list: list of backend
+            apply: bool If to save to runtime/disk
+
+        Returns: Void
+
+        """
+        if nodes_list is None or nodes_list == []:
+            logging.warning(f"No nodes to add to ProxySQL instance for cluster {self._get_pxc_manager_id()}")
+
+        for node in nodes_list:
+            self.insert_backend(node,apply)
+
+    def change_backend_nodes_status(self,nodes_dict:{} = None,status:str = "ONLINE",apply:bool = False):
+        """
+        Modify the STATUS of the passed nodes in Proxysql
+        Args:
+            nodes_list:[ProxyMysqlDataNode] List of bacend nodes
+            status: str A valid state to apply to the nodes
+            apply: bool If to save to runtime/disk
+
+        Returns:
+
+        """
+
+        if nodes_dict is None or nodes_dict == {}:
+            logging.warning(f"No nodes to modify for cluster {self._get_pxc_manager_id()}")
+
+        if status not in self.VALID_BACKEND_STATE:
+            logging.warning(f" Trying to set an invalid status: {status} valid statuses {self.VALID_BACKEND_STATE}")
+
+        node_list = []
+        for node in nodes_dict.values():
+            node.status = status
+            node_list.append(node)
+
+        self.update_nodes(node_list,True)
+
