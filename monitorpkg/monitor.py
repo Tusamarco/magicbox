@@ -1,16 +1,15 @@
-import time
-import threading
-import sys
 from logging import exception
 
 import keyboard
 
 import time
-import threading
-import sys
-import keyboard
+
+# import keyboard
 from proxysqlpkg.proxysql_obj import ProxySQLNode
 from rich.console import Console
+
+from pynput import keyboard
+from threading import Thread
 
 
 class Monitor:
@@ -54,7 +53,6 @@ class Monitor:
             # print(line)
         # self.last_lines = len(lines)
 
-
     def monitor(self):
         if self.proxy_node is None:
             raise exception("ProxySQL NOde canot be None when monitoring")
@@ -62,40 +60,52 @@ class Monitor:
         print("Starting Monitor...")
         print("Press 'q' to quit, 'm' to toggle mode")
 
-        while self.running:
-            if self.mode == self.MODE_PROXYSQL_PXC_SUNMMARY:
-                 output = self.display_summary(self.proxy_node.monitor_get_connectivity_summary())
-            else:
+        # while self.running:
+        while not stop_process:
+           if self.mode == self.MODE_PROXYSQL_PXC_SUNMMARY:
+                output = self.display_summary(self.proxy_node.monitor_get_connectivity_summary())
+           else:
                 output = self.display_summary()
 
-            self.print_output(output)
-            time.sleep(self.refresh_rate)
+           self.print_output(output)
+
+           time.sleep(self.refresh_rate)
+
+
 
     def keyboard_listner_start(self):
         # Start keyboard listener in a separate thread
-        def listen_for_keys():
-            while self.running:
-                if keyboard.is_pressed('q'):
-                    self.running = False
-                elif keyboard.is_pressed('m'):
-                    self.mode = self.MODE_PROXYSQL_PXC_QUERY_RULE_USAGE if self.mode == self.MODE_PROXYSQL_PXC_SUNMMARY else self.MODE_PROXYSQL_PXC_SUNMMARY
-                    # Small delay to prevent rapid toggling
-                    time.sleep(0.3)
-                time.sleep(0.1)
+        # def listen_for_keys():
+        #     while self.running:
+        #         if keyboard.is_pressed('q'):
+        #             self.running = False
+        #         elif keyboard.is_pressed('m'):
+        #             self.mode = self.MODE_PROXYSQL_PXC_QUERY_RULE_USAGE if self.mode == self.MODE_PROXYSQL_PXC_SUNMMARY else self.MODE_PROXYSQL_PXC_SUNMMARY
+        #             # Small delay to prevent rapid toggling
+        #             time.sleep(0.3)
+        #         time.sleep(0.1)
+        #
+        # key_thread = threading.Thread(target=listen_for_keys)
+        # key_thread.daemon = True
+        # key_thread.start()
 
-        key_thread = threading.Thread(target=listen_for_keys)
-        key_thread.daemon = True
-        key_thread.start()
 
         # Start monitoring
         self.monitor()
+        listener.stop()
 
         print("\nMonitor stopped.")
 
-
+def on_press(key):
+    global stop_process
+    try:
+        if key.char == 'q':
+            stop_process = True
+    except AttributeError:
+        pass
 #
 #
-# if __name__ == "__main__":
+# if __name__ == "__main__":q
 #     try:
 #         monitor = Monitor()
 #         monitor.keyboard_listner_start()
@@ -103,3 +113,8 @@ class Monitor:
 #         print("\nMonitoring stopped by user.")
 #     except Exception as e:
 #         print(f"An error occurred: {e}")
+
+
+stop_process =False
+listener = keyboard.Listener(on_press=on_press)
+listener.start()

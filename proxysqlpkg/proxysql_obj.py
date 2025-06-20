@@ -6,13 +6,11 @@ from io import StringIO
 from logging import exception
 from typing import Dict
 
-from numpy.f2py.auxfuncs import applyrules
-
 from common import utils_mb
 from mysqlpkg.mysql_obj import MysqlNode
 
 import json
-import common.dbtools as dbtools
+
 
 
 class ServerId:
