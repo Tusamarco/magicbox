@@ -1233,3 +1233,83 @@ class ProxySQLNode(MysqlNode):
 
         self.update_nodes(node_list,True)
 
+
+    def monitor_get_connectivity_summary(self):
+        if not self.session.is_connected():
+            raise exception("Session is close cannot perform monitor action")
+
+
+        '''
+        | weight | hostgroup | srv_host      | srv_port | status       | ConnUsed | ConnFree | ConnOK | ConnERR | MaxConnUsed | Queries | Queries_GTID_sync | Bytes_data_sent | Bytes_data_recv | Latency_us |
+        +--------+-----------+---------------+----------+--------------+----------+----------+--------+---------+-------------+---------+-------------------+-----------------+-----------------+------------+
+        | 999    | 100       | 192.168.4.21  | 3306     | OFFLINE_SOFT | 0        | 0        | 0      | 0       | 0           | 0       | 0                 | 0               | 0               | 1394       |
+        '''
+
+        # We define the columns
+        template_headers = ["weight","hostgroup", "srv_host","srv_port", "status","ConnUsed","ConnFree","ConnOK",
+                            "ConnERR","MaxConnUsed", "Queries", "Queries_GTID_sync","Bytes_data_sent",
+                            "Bytes_data_recv","Latency_us"]
+
+        data_set = []
+
+        # We identify the length for each column
+        column_len = []
+        for header in template_headers:
+            column_len.append(len(header))
+
+        # column_widths = [weight_len,hostgroup_len, srv_host_len,srv_port_len, status_len,ConnUsed_len,ConnFree_len,ConnOK_len,
+        #                     ConnERR_len,MaxConnUsed_len, Queries_len, Queries_GTID_sync_len,Bytes_data_sent_len,
+        #                     Bytes_data_recv_len,Latency_us]
+
+
+        # Get the data from Proxysql
+        cursor = self.session.cursor(dictionary=True)
+        cursor.execute(f"select b.weight, c.* from stats_mysql_connection_pool c left JOIN runtime_mysql_servers b " +
+                       f"ON  c.hostgroup=b.hostgroup_id and c.srv_host=b.hostname and c.srv_port = b.port order by hostgroup,srv_host desc;")
+
+
+        dbrows = cursor.fetchall()
+        for dbrow in dbrows:
+            weight = dbrow["weight"]
+            hostgroup = dbrow["hostgroup"]
+            srv_host = dbrow["srv_host"]
+            srv_port = dbrow["srv_port"]
+            status = dbrow["status"]
+            connUsed = dbrow["ConnUsed"]
+            connFree = dbrow["ConnFree"]
+            connOK = dbrow["ConnOK"]
+            connERR = dbrow["ConnERR"]
+            maxConnUsed = dbrow["MaxConnUsed"]
+            queries = dbrow["Queries"]
+            queries_GTID_sync = dbrow["Queries_GTID_sync"]
+            bytes_data_sent = dbrow["Bytes_data_sent"]
+            bytes_data_recv = dbrow["Bytes_data_recv"]
+            latency_us = dbrow["Latency_us"]
+
+            # Convert all into a dataline
+            data_line = [f"{weight}", f"{hostgroup}", f"{srv_host}", f"{srv_port}", f"{status}", f"{connUsed}", f"{connFree}", f"{connOK}",
+                            f"{connERR}", f"{maxConnUsed}", f"{queries}", f"{queries_GTID_sync}", f"{bytes_data_sent}",
+                            f"{bytes_data_recv}", f"{latency_us}"]
+            count = 0
+
+            # Check that the length define is ok otherwise we will update it
+            while count < len(data_line):
+                if column_len[count] < len(data_line[count]):
+                    column_len[count] = len(data_line[count])
+                count += 1
+
+            # Append the data line to the data_set to be printed
+            data_set.append(data_line)
+
+        # Create format string
+        fmt = " | ".join([f"{{:<{w}}}" for w in column_len])
+
+        # Build header
+        header = fmt.format(*template_headers)
+        separator = "-" * len(header)
+
+        # Build rows
+        rows = [fmt.format(*row) for row in data_set]
+
+        table = "\n".join([header, separator] + rows)
+        return [table]

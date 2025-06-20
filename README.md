@@ -4,7 +4,9 @@
 ## modules
 pip install mysql-connector-python
 pip install scipy
+pip install keyboard
 
+from rich.console import Console
 
 ## Logger
 We use logging to print out messages on the console.
