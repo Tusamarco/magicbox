@@ -11,13 +11,15 @@ from rich.console import Console
 from pynput import keyboard
 from threading import Thread
 
-
 class Monitor:
     MODE_PROXYSQL_PXC_SUNMMARY = 1
     MODE_PROXYSQL_PXC_QUERY_RULE_USAGE = 2
+    MODE_RUN = 1
+    MODE_PAUSE = 2
+    MODE_STOP = 0
 
     def __init__(self,proxy_node:ProxySQLNode = None):
-        self.running = True
+        self.status = self.MODE_RUN
         self.mode = self.MODE_PROXYSQL_PXC_SUNMMARY
         self.refresh_rate = 1  # seconds
         self.last_lines = 0
@@ -58,16 +60,17 @@ class Monitor:
             raise exception("ProxySQL NOde canot be None when monitoring")
 
         print("Starting Monitor...")
-        print("Press 'q' to quit, 'm' to toggle mode")
+        print("Press 'q' to quit, 'p' to pause, 's' to start again 'm' to toggle mode")
 
         # while self.running:
-        while not stop_process:
-           if self.mode == self.MODE_PROXYSQL_PXC_SUNMMARY:
-                output = self.display_summary(self.proxy_node.monitor_get_connectivity_summary())
-           else:
-                output = self.display_summary()
+        while not monitor_process_status == Monitor.MODE_STOP:
+           if monitor_process_status != Monitor.MODE_PAUSE:
+               if self.mode == self.MODE_PROXYSQL_PXC_SUNMMARY:
+                    output = self.display_summary(self.proxy_node.monitor_get_connectivity_summary())
+               else:
+                    output = self.display_summary()
 
-           self.print_output(output)
+               self.print_output(output)
 
            time.sleep(self.refresh_rate)
 
@@ -97,10 +100,12 @@ class Monitor:
         print("\nMonitor stopped.")
 
 def on_press(key):
-    global stop_process
+    global monitor_process_status
     try:
         if key.char == 'q':
-            stop_process = True
+            monitor_process_status = Monitor.MODE_STOP
+            listener.stop()
+        elif key.char == 'q':
     except AttributeError:
         pass
 #
@@ -114,7 +119,9 @@ def on_press(key):
 #     except Exception as e:
 #         print(f"An error occurred: {e}")
 
+monitor_process_status = Monitor.MODE_RUN
 
-stop_process =False
 listener = keyboard.Listener(on_press=on_press)
 listener.start()
+
+
