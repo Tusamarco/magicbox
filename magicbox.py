@@ -3,6 +3,7 @@ import logging
 
 import importlib
 
+from monitorpkg.monitor import Monitor
 from proxysqlpkg.proxysql_obj import ProxySQLCluster, ProxySQLNode, ProxyMysqlDataNode
 from pxcpkg.pxc_obj import PXCCluster
 
@@ -28,6 +29,21 @@ class MagicC:
         # pass
         # self.pxcprocessor = pxcprocessor.PXCProcessor()
 
+
+    @staticmethod
+    def test_monitor():
+        hgid:int = 200
+        # processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
+        #cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@10.211.55.5:3307",["10.211.55.5:3307","10.211.55.5:3308","10.211.55.5:3309"])
+
+
+        cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@192.168.4.205:3306",
+                                                         ["192.168.4.231","192.168.4.205","192.168.4.21"])
+        cluster.number_of_writers = 1
+        cluster.connect_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
+        monitor = Monitor(cluster.proxysql_node)
+        monitor.start()
+        # monitor.stop()
 
     @staticmethod
     def check_all():

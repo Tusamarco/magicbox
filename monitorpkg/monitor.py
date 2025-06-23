@@ -1,3 +1,4 @@
+import os
 from logging import exception
 
 import keyboard
@@ -38,8 +39,8 @@ class Monitor:
     def display_summary(self, incoming_data:[str] = ""):
         output = []
         output.append("=== PXC CLUSTER connection Overview  ===")
-        output.append("\nPress 'q' to quit, 'm' to toggle mode")
-        output.append("\n ")
+        output.append("Press 'q' to quit, 'p' to pause, 's' to start again 'm' to toggle mode")
+        output.append(" ")
         count = 0
         while count < len(incoming_data):
             output.append(incoming_data[count])
@@ -47,15 +48,17 @@ class Monitor:
         return output
 
     def print_output(self, lines):
-        # self.clear_previous_output()
         self.console.clear(True)
+        os.system('cls' if os.name == 'nt' else 'clear')
 
         for line in lines:
-            self.console.print(line, end="\r")
+            print(f"{line}")
+            # self.console.print(line, end="\r")
             # print(line)
         # self.last_lines = len(lines)
 
     def monitor(self):
+        global clear_entry
         if self.proxy_node is None:
             raise exception("ProxySQL NOde canot be None when monitoring")
 
@@ -72,40 +75,42 @@ class Monitor:
 
                self.print_output(output)
 
+           if clear_entry:
+                self.console.print("\b \b", end="")
            time.sleep(self.refresh_rate)
-
-
-
-    def keyboard_listner_start(self):
-        # Start keyboard listener in a separate thread
-        # def listen_for_keys():
-        #     while self.running:
-        #         if keyboard.is_pressed('q'):
-        #             self.running = False
-        #         elif keyboard.is_pressed('m'):
-        #             self.mode = self.MODE_PROXYSQL_PXC_QUERY_RULE_USAGE if self.mode == self.MODE_PROXYSQL_PXC_SUNMMARY else self.MODE_PROXYSQL_PXC_SUNMMARY
-        #             # Small delay to prevent rapid toggling
-        #             time.sleep(0.3)
-        #         time.sleep(0.1)
-        #
-        # key_thread = threading.Thread(target=listen_for_keys)
-        # key_thread.daemon = True
-        # key_thread.start()
-
-
-        # Start monitoring
-        self.monitor()
-        listener.stop()
 
         print("\nMonitor stopped.")
 
+
+    def start(self):
+        # Start monitoring
+        global monitor_process_status
+        monitor_process_status = Monitor.MODE_RUN
+        self.monitor()
+        self.stop()
+
+
+
+    def stop(self):
+        global monitor_process_status
+        monitor_process_status = self.MODE_STOP
+        listener.stop()
+
 def on_press(key):
     global monitor_process_status
+    global clear_entry
     try:
         if key.char == 'q':
             monitor_process_status = Monitor.MODE_STOP
             listener.stop()
-        elif key.char == 'q':
+        elif key.char == 'p':
+            monitor_process_status = Monitor.MODE_PAUSE
+            clear_entry = True
+        elif key.char == 's':
+            monitor_process_status = Monitor.MODE_RUN
+            clear_entry = True
+
+
     except AttributeError:
         pass
 #
@@ -119,6 +124,7 @@ def on_press(key):
 #     except Exception as e:
 #         print(f"An error occurred: {e}")
 
+clear_entry = False
 monitor_process_status = Monitor.MODE_RUN
 
 listener = keyboard.Listener(on_press=on_press)
