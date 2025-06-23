@@ -360,3 +360,63 @@ def parse_db_url(url):
 
     except Exception as e:
         raise ValueError(f"Invalid URL format: {e}")
+
+
+def get_resultset_as_table_formatted(session,query):
+    """
+    This method takes a database session and a query to execute and return a formatted table representing the resultset
+    Args:
+        session: MySQL Database session
+        query: String Valid sql query
+
+    Returns: a list containing a string with the formatted table
+
+    """
+    if not session.is_connected():
+        raise sys.exception("Session is close cannot perform monitor action")
+
+    data_set=[]
+    cursor = session.cursor(dictionary=True)
+    cursor.execute(query)
+
+    # We get the fields names from the cursor
+    template_headers = [i[0] for i in cursor.description]
+
+    # We identify the length for each column
+    column_len = []
+    for header in template_headers:
+        column_len.append(len(header))
+
+    # Fetch the data
+    dbrows = cursor.fetchall()
+    for dbrow in dbrows:
+        # Convert all into a dataline
+        data_line = []
+
+        for field in template_headers:
+            data_line.append(f'{dbrow[field]}')
+
+        count = 0
+        # Check that the length define is ok otherwise we will update it
+        while count < len(data_line):
+            if column_len[count] < len(data_line[count]):
+                column_len[count] = len(data_line[count])
+            count += 1
+
+        # Append the data line to the data_set to be printed
+        data_set.append(data_line)
+
+    # Create format string
+    fmt = " | ".join([f"{{:<{w}}}" for w in column_len])
+
+    # Build header
+    header = fmt.format(*template_headers)
+    separator = "-" * len(header)
+
+    # Build rows
+    rows = [fmt.format(*row) for row in data_set]
+
+    # Build final table representation
+    table = "\n".join([header, separator] + rows)
+
+    return [table]

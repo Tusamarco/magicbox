@@ -31,8 +31,8 @@ class MagicC:
 
 
     @staticmethod
-    def test_monitor():
-        hgid:int = 200
+    def test_monitor(refresh_rate = 1):
+        hgid:int = 100
         # processor = MagicC.create_pxc_processor("dba:dba@192.168.4.205:3306")
         #cluster: PXCCluster = PXCCluster.connect_cluster("dba:dba@10.211.55.5:3307",["10.211.55.5:3307","10.211.55.5:3308","10.211.55.5:3309"])
 
@@ -41,8 +41,10 @@ class MagicC:
                                                          ["192.168.4.231","192.168.4.205","192.168.4.21"])
         cluster.number_of_writers = 1
         cluster.connect_proxysql_node("cluster1:clusterpass@192.168.4.191:6032")
+        cluster.proxysql_node.set_current_cluster_writer_id(hgid)
+
         monitor = Monitor(cluster.proxysql_node)
-        monitor.start()
+        monitor.start(refresh_rate)
         # monitor.stop()
 
     @staticmethod

@@ -6,7 +6,7 @@ from io import StringIO
 from logging import exception
 from typing import Dict
 
-from common import utils_mb
+from common import utils_mb, dbtools
 from mysqlpkg.mysql_obj import MysqlNode
 
 import json
@@ -1165,14 +1165,22 @@ class ProxySQLNode(MysqlNode):
         except:
             raise Exception()
 
+    def get_active_hostgroups_id(self):
+        """
+        Method return a list with the ID (int) of any Hostgroup involved in the PXC cluster activities
+        Returns: [int]
+        """
+        hostgroup_ids = Hostgroup.get_hostgroup_ids_by_handler_support(self.get_current_cluster_writer_id(),
+                                                                       self.handler)
+        return hostgroup_ids
     def get_active_cluster_nodes(self):
         """
-        This method return a list wit all the nodes related to the current active writer
+        This method return a list with all the nodes related to the current active writer
         Returns: List of ProxyMysqlDataNode
 
         """
 
-        hostgroup_ids = Hostgroup.get_hostgroup_ids_by_handler_support(self.get_current_cluster_writer_id(),self.handler)
+        hostgroup_ids = self.get_active_hostgroups_id()
 
         # We need to transform the Hosgroup list into int list
         hostgroup_ids_lookup = []
@@ -1233,9 +1241,6 @@ class ProxySQLNode(MysqlNode):
 
 
     def monitor_get_connectivity_summary(self):
-        if not self.session.is_connected():
-            raise exception("Session is close cannot perform monitor action")
-
 
         '''
         | weight | hostgroup | srv_host      | srv_port | status       | ConnUsed | ConnFree | ConnOK | ConnERR | MaxConnUsed | Queries | Queries_GTID_sync | Bytes_data_sent | Bytes_data_recv | Latency_us |
@@ -1243,71 +1248,140 @@ class ProxySQLNode(MysqlNode):
         | 999    | 100       | 192.168.4.21  | 3306     | OFFLINE_SOFT | 0        | 0        | 0      | 0       | 0           | 0       | 0                 | 0               | 0               | 1394       |
         '''
 
-        # We define the columns
-        template_headers = ["weight","hostgroup", "srv_host","srv_port", "status","ConnUsed","ConnFree","ConnOK",
-                            "ConnERR","MaxConnUsed", "Queries", "Queries_GTID_sync","Bytes_data_sent",
-                            "Bytes_data_recv","Latency_us"]
+        sql = (f"select b.weight, c.* from stats_mysql_connection_pool c left JOIN runtime_mysql_servers b"
+               f" ON  c.hostgroup=b.hostgroup_id and c.srv_host=b.hostname and c.srv_port = b.port order by hostgroup,srv_host desc;")
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
 
-        data_set = []
-
-        # We identify the length for each column
-        column_len = []
-        for header in template_headers:
-            column_len.append(len(header))
-
-        # column_widths = [weight_len,hostgroup_len, srv_host_len,srv_port_len, status_len,ConnUsed_len,ConnFree_len,ConnOK_len,
-        #                     ConnERR_len,MaxConnUsed_len, Queries_len, Queries_GTID_sync_len,Bytes_data_sent_len,
-        #                     Bytes_data_recv_len,Latency_us]
+        return table
 
 
-        # Get the data from Proxysql
-        cursor = self.session.cursor(dictionary=True)
-        cursor.execute(f"select b.weight, c.* from stats_mysql_connection_pool c left JOIN runtime_mysql_servers b " +
-                       f"ON  c.hostgroup=b.hostgroup_id and c.srv_host=b.hostname and c.srv_port = b.port order by hostgroup,srv_host desc;")
+
+    def monitor_get_connection_by_backend(self):
+        """
+
+        Returns:
+
+        """
+
+        '''
+        select srv_host,srv_port,command,avg(time_ms) time_ms, count(ThreadID) connections from stats_mysql_processlist group by srv_host,srv_port,command;
+        +---------------+---------+--------------+-----------------+
+        | srv_host      | command | avg(time_ms) | count(ThreadID) |
+        +---------------+---------+--------------+-----------------+
+        | NULL          | Sleep   | 0.0          | 2               |
+        | 192.168.4.205 | Query   | 0.0          | 1               |
+        | 192.168.4.231 | Query   | 0.0          | 1               |
+        +---------------+---------+--------------+-----------------+
+        '''
+        sql = f"select srv_host,srv_port,command,avg(time_ms) time_ms, count(ThreadID) connections from stats_mysql_processlist group by srv_host,srv_port,command"
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
+        return table
+
+    def monitor_get_connections_by_user(self):
+        """
+
+        Returns:
+
+        """
+        '''
+        select * from stats_mysql_users;
+        +----------+----------------------+--------------------------+
+        | username | frontend_connections | frontend_max_connections |
+        +----------+----------------------+--------------------------+
+        | app_test | 4                    | 10000                    |
+        | dba      | 0                    | 10000                    |
+        | test     | 0                    | 10000                    |
+        | user1    | 0                    | 10000                    |
+        | user2    | 0                    | 10000                    |
+        +----------+----------------------+--------------------------+
+        '''
+        sql = f"select * from stats_mysql_users"
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
+        return table
 
 
-        dbrows = cursor.fetchall()
-        for dbrow in dbrows:
-            weight = dbrow["weight"]
-            hostgroup = dbrow["hostgroup"]
-            srv_host = dbrow["srv_host"]
-            srv_port = dbrow["srv_port"]
-            status = dbrow["status"]
-            connUsed = dbrow["ConnUsed"]
-            connFree = dbrow["ConnFree"]
-            connOK = dbrow["ConnOK"]
-            connERR = dbrow["ConnERR"]
-            maxConnUsed = dbrow["MaxConnUsed"]
-            queries = dbrow["Queries"]
-            queries_GTID_sync = dbrow["Queries_GTID_sync"]
-            bytes_data_sent = dbrow["Bytes_data_sent"]
-            bytes_data_recv = dbrow["Bytes_data_recv"]
-            latency_us = dbrow["Latency_us"]
 
-            # Convert all into a dataline
-            data_line = [f"{weight}", f"{hostgroup}", f"{srv_host}", f"{srv_port}", f"{status}", f"{connUsed}", f"{connFree}", f"{connOK}",
-                            f"{connERR}", f"{maxConnUsed}", f"{queries}", f"{queries_GTID_sync}", f"{bytes_data_sent}",
-                            f"{bytes_data_recv}", f"{latency_us}"]
-            count = 0
+    def monitor_get_mysql_galera_log(self):
+        """
 
-            # Check that the length define is ok otherwise we will update it
-            while count < len(data_line):
-                if column_len[count] < len(data_line[count]):
-                    column_len[count] = len(data_line[count])
-                count += 1
+        Returns:
 
-            # Append the data line to the data_set to be printed
-            data_set.append(data_line)
+        """
+        '''
+        select * from mysql_server_galera_log  order by time_start_us desc limit 10;
+        +---------------+------+------------------+-----------------+-------------------+-----------+------------------------+-------------------+--------------+----------------------+---------------------------------+----------------+-------+
+        | hostname      | port | time_start_us    | success_time_us | primary_partition | read_only | wsrep_local_recv_queue | wsrep_local_state | wsrep_desync | wsrep_reject_queries | wsrep_sst_donor_rejects_queries | pxc_maint_mode | error |
+        +---------------+------+------------------+-----------------+-------------------+-----------+------------------------+-------------------+--------------+----------------------+---------------------------------+----------------+-------+
+        | 192.168.4.21  | 3306 | 1750347275139267 | 22000           | YES               | NO        | 0                      | 4                 | NO           | NO                   | NO                              | NO             | NULL  |
+        | 192.168.4.231 | 3306 | 1750347275127157 | 20806           | YES               | NO        | 0                      | 4                 | NO           | NO                   | NO                              | NO             | NULL  |
+        | 192.168.4.205 | 3306 | 1750347275124895 | 21230           | YES               | NO        | 0                      | 4                 | NO           | NO                   | NO                              | NO             | NULL  |
+        +---------------+------+------------------+-----------------+-------------------+-----------+------------------------+-------------------+--------------+----------------------+---------------------------------+----------------+-------+
+        '''
+        sql = f"select * from mysql_server_galera_log  order by time_start_us desc limit 10"
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
+        return table
 
-        # Create format string
-        fmt = " | ".join([f"{{:<{w}}}" for w in column_len])
+    def monitor_get_query_rules_for_running_PXC_cluster(self):
+        """
 
-        # Build header
-        header = fmt.format(*template_headers)
-        separator = "-" * len(header)
+        Returns:
 
-        # Build rows
-        rows = [fmt.format(*row) for row in data_set]
+        """
+        '''
+        select * from mysql_query_rules order by 1;
+        +---------+--------+----------+------------+--------+-------------+------------+------------+--------+---------------------+---------------+----------------------+--------------+---------+-----------------+-----------------------+-----------+--------------------+---------------+-----------+---------+---------+-------+-------------------+----------------+------------------+-----------+--------+-------------+-----------+---------------------+-----+-------+------------+---------+
+        | rule_id | active | username | schemaname | flagIN | client_addr | proxy_addr | proxy_port | digest | match_digest        | match_pattern | negate_match_pattern | re_modifiers | flagOUT | replace_pattern | destination_hostgroup | cache_ttl | cache_empty_result | cache_timeout | reconnect | timeout | retries | delay | next_query_flagIN | mirror_flagOUT | mirror_hostgroup | error_msg | OK_msg | sticky_conn | multiplex | gtid_from_hostgroup | log | apply | attributes | comment |
+        +---------+--------+----------+------------+--------+-------------+------------+------------+--------+---------------------+---------------+----------------------+--------------+---------+-----------------+-----------------------+-----------+--------------------+---------------+-----------+---------+---------+-------+-------------------+----------------+------------------+-----------+--------+-------------+-----------+---------------------+-----+-------+------------+---------+
+        | 1040    | 1      | app_test | NULL       | 0      | NULL        | NULL       | 6033       | NULL   | ^SELECT.*FOR UPDATE | NULL          | 0                    | CASELESS     | NULL    | NULL            | 100                   | NULL      | NULL               | NULL          | NULL      | NULL    | 3       | NULL  | NULL              | NULL           | NULL             | NULL      | NULL   | NULL        | NULL      | NULL                | NULL | 1     |            | NULL    |
+        | 1042    | 1      | app_test | NULL       | 0      | NULL        | NULL       | 6033       | NULL   | ^SELECT.*$          | NULL          | 0                    | CASELESS     | NULL    | NULL            | 101                   | NULL      | NULL               | NULL          | NULL      | NULL    | 3       | NULL  | NULL              | NULL           | NULL             | NULL      | NULL   | NULL        | NULL      | NULL                | NULL | 1     |            | NULL    |
+        +---------+--------+----------+------------+--------+-------------+------------+------------+--------+---------------------+---------------+----------------------+--------------+---------+-----------------+-----------------------+-----------+--------------------+---------------+-----------+---------+---------+-------+-------------------+----------------+------------------+-----------+--------+-------------+-----------+---------------------+-----+-------+------------+---------+
+        '''
+        # We limit the query to the relevant Hostgroup only
+        ids_str = self._get_hgids_as_string_comma_separated()
 
-        table = "\n".join([header, separator] + rows)
-        return [table]
+        sql = f"select * from mysql_query_rules where destination_hostgroup in ({ids_str}) order by rule_id"
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
+        return table
+
+    def _get_hgids_as_string_comma_separated(self):
+        """
+        transform a list of Hostgroups into a string comma separated of HG ides only
+        Returns: string
+
+        """
+        hgids = self.get_active_hostgroups_id()
+        ids_str = ""
+        for hgid in hgids:
+            ids_str += f" {hgid.hg_id},"
+        return ids_str[:-1]
+
+    def monitor_query_rules_with_usage_stats(self):
+        """
+
+        Returns:
+
+        """
+        '''
+        SELECT stats.stats_mysql_query_rules.rule_id,active,match_pattern,destination_hostgroup,apply,hits, mysql_query_rules.error_msg AS error_message FROM  stats.stats_mysql_query_rules JOIN mysql_query_rules ON stats_mysql_query_rules.rule_id = mysql_query_rules.rule_id where destination_hostgroup in (100,101)  ORDER BY hits DESC;
+        +---------+--------+---------------+-----------------------+-------+---------+---------------+
+        | rule_id | active | match_pattern | destination_hostgroup | apply | hits    | error_message |
+        +---------+--------+---------------+-----------------------+-------+---------+---------------+
+        | 1042    | 1      | NULL          | 101                   | 1     | 1222364 | NULL          |
+        | 1040    | 1      | NULL          | 100                   | 1     | 0       | NULL          |
+        +---------+--------+---------------+-----------------------+-------+---------+---------------+
+
+        '''
+        ids_str = self._get_hgids_as_string_comma_separated()
+
+        sql =(f"SELECT stats.stats_mysql_query_rules.rule_id,active,match_pattern,destination_hostgroup,apply,hits, mysql_query_rules.error_msg AS error_message "
+              f"FROM  stats.stats_mysql_query_rules JOIN mysql_query_rules ON stats_mysql_query_rules.rule_id = mysql_query_rules.rule_id "
+              f"where destination_hostgroup in ({ids_str})  ORDER BY hits DESC;")
+
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
+        return table
+
+
+    # TODO add the following monitor for query rules:
+    # - Detailed Rule Statistics
+    # - Recently Matched Rules
+    # - Most Frequently Matched Rules
