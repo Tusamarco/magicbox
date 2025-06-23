@@ -1,11 +1,10 @@
 import os
 from logging import exception
 
-import keyboard
+
 
 import time
 
-# import keyboard
 from proxysqlpkg.proxysql_obj import ProxySQLNode
 from rich.console import Console
 
