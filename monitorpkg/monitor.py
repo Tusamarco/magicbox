@@ -105,7 +105,7 @@ class Monitor:
                 elif monitor_mode == self.MODE_PROXYSQL_PXC_QUERY_RULE_RECENTLY_MATCHED:
                     output.append("=== Query rules Most recently used  ===")
                     output.append("---------------------------------------")
-                    output.extend(self.proxy_node.monitor_query_rules_most_recent_matches())
+                    output.extend(self.proxy_node.monitor_recently_matched_rules_with_query_digest())
 
                 elif monitor_mode == self.MODE_PROXYSQL_PXC_MOST_EXPENSIVE_QUERIES   :
                     output.append("=== Most expensive queries  ===")
