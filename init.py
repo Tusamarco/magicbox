@@ -151,7 +151,13 @@ def create_pxc_processor(uri):
 
     }
 
-from magicbox import MagicC
+from magicbox.magicbox import MagicC
 @plugin_function("magicbox.checkAll")
 def check_all():
     MagicC.check_all()
+    
+@plugin_function("magicbox.checkMonitor")
+def check_monitor():
+    MagicC.test_monitor()
+    
+    
