@@ -1380,8 +1380,46 @@ class ProxySQLNode(MysqlNode):
         table = dbtools.get_resultset_as_table_formatted(self.session,sql)
         return table
 
+    def monitor_recently_matched_rules_with_query_digest(self):
+        """
 
-    # TODO add the following monitor for query rules:
-    # - Detailed Rule Statistics
-    # - Recently Matched Rules
-    # - Most Frequently Matched Rules
+        Returns:
+
+        """
+        '''
+        SELECT hostgroup,digest, digest_text,count_star, first_seen,last_seen FROM stats.stats_mysql_query_digest where hostgroup in (100,101) ORDER BY last_seen DESC LIMIT 10;
+        +-----------+--------------------+-----------------------------------------------------------------------------------------------------+------------+------------+------------+
+        | hostgroup | digest             | digest_text                                                                                         | count_star | first_seen | last_seen  |
+        +-----------+--------------------+-----------------------------------------------------------------------------------------------------+------------+------------+------------+
+        | 101       | 0xA49078C76EB6DFD9 | SELECT id,millid,date,continent,active,kwatts_s FROM mill7 WHERE id BETWEEN ? AND ? ORDER BY millid | 8883       | 1750688675 | 1750700705 |
+        | 101       | 0xF5EC6EE9EEB86037 | SELECT id,millid,date,continent,active,kwatts_s FROM mill3 WHERE id BETWEEN ? AND ?                 | 9020       | 1750688674 | 1750700705 |
+        +-----------+--------------------+-----------------------------------------------------------------------------------------------------+------------+------------+------------+
+    
+        '''
+        ids_str = self._get_hgids_as_string_comma_separated()
+        sql = f"SELECT hostgroup,digest, digest_text,count_star, first_seen,last_seen FROM stats.stats_mysql_query_digest where hostgroup in ({ids_str}) ORDER BY last_seen DESC LIMIT 10"
+
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
+        return table
+
+
+    def monitor_expensive_queries(self):
+        """
+
+        Returns:
+
+        """
+        '''
+        select hostgroup,schemaname, username, client_address,digest, SUBSTRING(digest_text,1,60), count_star, sum_time, sum_rows_affected,sum_rows_sent from stats.stats_mysql_query_digest order by sum_time desc limit 2;
+        +-----------+-----------------+----------+----------------+--------------------+--------------------------------------------------------------+------------+-----------+-------------------+---------------+
+        | hostgroup | schemaname      | username | client_address | digest             | SUBSTRING(digest_text,1,60)                                  | count_star | sum_time  | sum_rows_affected | sum_rows_sent |
+        +-----------+-----------------+----------+----------------+--------------------+--------------------------------------------------------------+------------+-----------+-------------------+---------------+
+        | 101       | windmills_small | app_test |                | 0x43967E4BA20AC4E1 | SELECT id,millid,date,continent,active,kwatts_s FROM mill5 W | 100910     | 220102685 | 0                 | 66599         |
+        | 101       | windmills_small | app_test |                | 0x78C8B71D0F1D2974 | SELECT id,millid,date,continent,active,kwatts_s FROM mill10  | 100796     | 219731617 | 0                 | 67089         |
+        +-----------+-----------------+----------+----------------+--------------------+--------------------------------------------------------------+------------+-----------+-------------------+---------------+
+        '''
+        ids_str = self._get_hgids_as_string_comma_separated()
+        sql = f"select hostgroup,schemaname, username, client_address,digest, SUBSTRING(digest_text,1,60), count_star, sum_time, sum_rows_affected,sum_rows_sent from stats.stats_mysql_query_digest where hostgroup in ({ids_str}) order by sum_time desc limit 10"
+
+        table = dbtools.get_resultset_as_table_formatted(self.session,sql)
+        return table

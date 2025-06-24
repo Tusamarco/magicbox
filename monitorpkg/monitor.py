@@ -18,6 +18,9 @@ class Monitor:
     MODE_PROXYSQL_PXC_LOG = 2
     MODE_PROXYSQL_PXC_QUERY_RULE_USAGE = 3
     MODE_PROXYSQL_PXC_QUERY_RULE_USAGE_STATS = 4
+    MODE_PROXYSQL_PXC_QUERY_RULE_RECENTLY_MATCHED = 5
+    MODE_PROXYSQL_PXC_MOST_EXPENSIVE_QUERIES = 6
+
     MODE_RUN = 1
     MODE_PAUSE = 2
     MODE_STOP = 0
@@ -28,7 +31,8 @@ class Monitor:
         self.last_lines = 0
         self.proxy_node = proxy_node
         self.commands_text = ("Press 'q' to quit, 'p' to pause, 's' to start again."
-                              "\n '1' for connection; 2 for galera log entries; 3 for query rules")
+                              "\n '1' for connection; 2 for galera log entries; 3 for query rules; 4 query rules stats; "
+                              "\n 5 most recently matched rules; 6 most expensive queries")
 
     # def display_summary(self, incoming_data: [str] = []):
     #     output = []
@@ -98,7 +102,15 @@ class Monitor:
                     output.append("-------------------------------")
                     output.extend(self.proxy_node.monitor_query_rules_with_usage_stats())
 
+                elif monitor_mode == self.MODE_PROXYSQL_PXC_QUERY_RULE_RECENTLY_MATCHED:
+                    output.append("=== Query rules Most recently used  ===")
+                    output.append("---------------------------------------")
+                    output.extend(self.proxy_node.monitor_query_rules_most_recent_matches())
 
+                elif monitor_mode == self.MODE_PROXYSQL_PXC_MOST_EXPENSIVE_QUERIES   :
+                    output.append("=== Most expensive queries  ===")
+                    output.append("-------------------------------")
+                    output.extend(self.proxy_node.monitor_expensive_queries())
 
 
                 else:
@@ -162,6 +174,13 @@ def on_press(key):
             monitor_mode = Monitor.MODE_PROXYSQL_PXC_QUERY_RULE_USAGE
         elif key.char == '4':
             monitor_mode = Monitor.MODE_PROXYSQL_PXC_QUERY_RULE_USAGE_STATS
+
+        elif key.char == '5':
+            monitor_mode = Monitor.MODE_PROXYSQL_PXC_QUERY_RULE_RECENTLY_MATCHED
+        elif key.char == '6':
+            monitor_mode = Monitor.MODE_PROXYSQL_PXC_MOST_EXPENSIVE_QUERIES
+
+
 
 
     except AttributeError:
