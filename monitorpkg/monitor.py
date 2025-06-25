@@ -3,7 +3,29 @@ from logging import exception
 
 import time
 
-from proxysqlpkg.proxysql_obj import ProxySQLNode
+
+# Generic import section [START]
+# to allow us to import libs no matter where if in mysql shell or outside
+import importlib
+def import_flexible(*module_paths):
+    last_error = None
+    for path in module_paths:
+        try:
+            module = importlib.import_module(path)
+            return module
+        except ImportError as e:
+            last_error = e
+    raise ImportError(
+        f"Could not import module from any of: {', '.join(module_paths)}"
+    ) from last_error
+
+
+proxy_lib = import_flexible("magicbox.proxysqlpkg.proxysql_obj", "proxysqlpkg.proxysql_obj")
+ProxySQLNode = getattr(proxy_lib, "ProxySQLNode")
+# Generic import section [END]
+
+
+# from proxysqlpkg.proxysql_obj import ProxySQLNode
 # from rich.console import Console
 
 from pynput import keyboard

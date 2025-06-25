@@ -1,25 +1,34 @@
 # What is this?
+MagicBox is a collection of Python scripts that can be run inside MySQL MySQL-Shell, as plugins.
+The code is designed to be eventually run also outside the MySQL sell as stand-alone.
 
+The main focus at the moment is to facilitate the management of a Percona XtraDB Cluster inside ProxySQL
 
-## modules
-pip install mysql-connector-python
-pip install scipy
-pip install keyboard <- No
+# What is already implemented:
+- ✔️ Connect to a PXC node and auto discovery the cluster nodes
+- ✔️ Based on cluster composition setup proper HGs for basic read/Write split.
+  - First node it connects is the Primary Writer
+  - Setup the scheduler groups for usage
+- (WIP) Sync users between ProxySQL and MySQL (PS)
+- ✔️ Monitor given cluster connections and generic usage
+- ✔️ Add/delete/modify a node manually
+- ✔️ Change state of cluster (Online/Offline/Read_Only/Single Primary/Multi Primary)
 
-from rich.console import Console
-from pynput import keyboard
+## Modules required
+pip install mysql-connector-python \
+pip install scipy \
+pip import pynput  
+
 
 ## Logger
-We use logging to print out messages on the console.
-During the execution by defaul the log level is WARNING
+We use logging to print out messages on the console, except for monitor.
+During the execution by default the log level is WARNING, 
 But we can easily change it doing:
 
 ```python
 import logging
 logging.getLogger().setLevel(logging.INFO)
-```
-To modify the format on the fly in the code :
-```python
+
 originalhan = logging.getLogger().handlers[0]
 modahnd = logging.StreamHandler()
 modahnd.setFormatter(logging.Formatter("%(message)s"))
@@ -32,9 +41,41 @@ logging.getLogger().handlers[0]=originalhan
 to see what levels are supported: 
 https://docs.python.org/3.13/library/logging.html#logging-levels
 
-## when using without MySQL shell
+
+## when using with MySQL shell
+In mysqlsh the plugin methods will be defined in the init.py file at root level.
+At the moment, there are two main plugin methods mainly for test purpose:
+- Magicbox.check_all()
+- Magicbox.check_monitor()
+
+The Magicbox object is ready to go when you start mysqlsh:
+```python
+MySQL  Py > Magicbox.help()
+NAME
+      Magicbox - The magicbox plugin
+
+DESCRIPTION
+      The magicbox plugin is going to bring you joy and candies
+
+FUNCTIONS
+      check_all()
+
+
+      check_monitor()
+
+
+      help([member])
+            Provides help about this object and it's members
+
+```
+
+You can call them also from command line:
+```shell
+./mysqlsh --py  --execute 'Magicbox.check_monitor()'
+```
+
 1) Open Python console
-2) Import the magicbox top class (that simulate the plugin call in shell)
+2) Import the magicbox top class (that simulates the plugin call in shell)
     ``` python 
    from magicbox import MagicC
    ```

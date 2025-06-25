@@ -104,54 +104,55 @@ print("Debugger attached.")
 
 # from proxysqlpkg import proxysql
 
-@plugin_function("magicbox.createProxysql")
-def createProxy(uri):
-    """
-    Create the ProxySQL Object.
-
-    Args:
-        uri (string): Connection uri to ProxySQL's admin interface.
-
-    Returns:
-        The newly created ProxySQL object
-    """
-    my_proxy = proxysql.ProxySQL(uri)
-    return {
-         'status': lambda loop=False: my_proxy.get_status(loop),
-         'configure': lambda: my_proxy.configure(),
-         'hosts': lambda: my_proxy.get_hosts(),
-         'version': lambda: my_proxy.get_version(),
-         'hostgroups': lambda: my_proxy.get_hostgroups(),
-         'getUsers': lambda hostgroup="": my_proxy.get_user_hostgroup(hostgroup),
-         'setUser': lambda hostgroup="", user="", password=False: my_proxy.set_user_hostgroup(hostgroup,user,password),
-         'importUsers': lambda hostgroup="", user_search="": my_proxy.import_users(hostgroup, user_search),
-         'setUserHostgroup': lambda hostgroup="", user_search="": my_proxy.set_host_group(hostgroup, user_search)
-    }
-    
-    
-@plugin_function("magicbox.create_pxc_processor")
-def create_pxc_processor(uri):
-    """
-    Create the PXCProcessor Object.
-
-    Args:
-        uri (string): Connection uri to any PXC node part of the cluster.
-
-    Returns:
-        The newly created PXC Processor object
-    """
-    processor = pxcprocessor.Pxc_processor(uri)
-    # return processor
-    return{
-        'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
-        'getPXCcluster': lambda: processor.get_pxc_cluster(),
-        'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
-        'setProxySQL': lambda uri="": processor.set_proxysql_node(uri),
-        'getProxySQL': lambda: processor.get_proxy_sql_node(),
-
-    }
+# @plugin_function("magicbox.createProxysql")
+# def createProxy(uri):
+#     """
+#     Create the ProxySQL Object.
+#
+#     Args:
+#         uri (string): Connection uri to ProxySQL's admin interface.
+#
+#     Returns:
+#         The newly created ProxySQL object
+#     """
+#     my_proxy = proxysql.ProxySQL(uri)
+#     return {
+#          'status': lambda loop=False: my_proxy.get_status(loop),
+#          'configure': lambda: my_proxy.configure(),
+#          'hosts': lambda: my_proxy.get_hosts(),
+#          'version': lambda: my_proxy.get_version(),
+#          'hostgroups': lambda: my_proxy.get_hostgroups(),
+#          'getUsers': lambda hostgroup="": my_proxy.get_user_hostgroup(hostgroup),
+#          'setUser': lambda hostgroup="", user="", password=False: my_proxy.set_user_hostgroup(hostgroup,user,password),
+#          'importUsers': lambda hostgroup="", user_search="": my_proxy.import_users(hostgroup, user_search),
+#          'setUserHostgroup': lambda hostgroup="", user_search="": my_proxy.set_host_group(hostgroup, user_search)
+#     }
+#
+#
+# @plugin_function("magicbox.create_pxc_processor")
+# def create_pxc_processor(uri):
+#     """
+#     Create the PXCProcessor Object.
+#
+#     Args:
+#         uri (string): Connection uri to any PXC node part of the cluster.
+#
+#     Returns:
+#         The newly created PXC Processor object
+#     """
+#     processor = pxcprocessor.Pxc_processor(uri)
+#     # return processor
+#     return{
+#         'setPXCcluster': lambda uri="": processor.set_pxc_cluster(uri),
+#         'getPXCcluster': lambda: processor.get_pxc_cluster(),
+#         'refreshPXCcluster': lambda uri="": processor.refresh_pxc_cluster(uri),
+#         'setProxySQL': lambda uri="": processor.set_proxysql_node(uri),
+#         'getProxySQL': lambda: processor.get_proxy_sql_node(),
+#
+#     }
 
 from magicbox.magicbox import MagicC
+
 @plugin_function("magicbox.checkAll")
 def check_all():
     MagicC.check_all()

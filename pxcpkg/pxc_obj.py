@@ -3,15 +3,56 @@ from io import StringIO
 from logging import exception
 from operator import truediv
 from typing import Dict
-from common import utils_mb
-import common.dbtools as dbtools
-from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node
 
-from proxysqlpkg.proxysql_obj import ProxySQLNode, ProxyMysqlDataNode, Hostgroup
-from proxysqlpkg.proxysql_obj import ServerId
+
+# Generic import section [START]
+# to allow us to import libs no matter where if in mysql shell or outside
+import importlib
+
+def import_flexible(*module_paths):
+    last_error = None
+    for path in module_paths:
+        try:
+            module = importlib.import_module(path)
+            return module
+        except ImportError as e:
+            last_error = e
+    raise ImportError(
+        f"Could not import module from any of: {', '.join(module_paths)}"
+    ) from last_error
+
+
+mon_lib = import_flexible("magicbox.monitorpkg.monitor", "monitorpkg.monitor")
+proxy_lib = import_flexible("magicbox.proxysqlpkg.proxysql_obj", "proxysqlpkg.proxysql_obj")
+# pxc_lib = import_flexible("magicbox.pxcpkg.pxc_obj", "pxcpkg.pxc_obj")
+dbtools = import_flexible("magicbox.common.dbtool", "common.dbtools")
+utils_mb = import_flexible("magicbox.common.utils_mb", "common.utils_mb")
+mysql_lib = import_flexible("magicbox.mysqlpkg.mysql_obj", "mysqlpkg.mysql_obj")
+
+
+Monitor = getattr(mon_lib, "Monitor")
+ProxySQLCluster = getattr(proxy_lib, "ProxySQLCluster")
+ProxySQLNode = getattr(proxy_lib, "ProxySQLNode")
+ProxyMysqlDataNode = getattr(proxy_lib, "ProxyMysqlDataNode")
+# PXCCluster = getattr(pxc_lib, "PXCCluster")
+# utils_mb = utils_lib
+# dbtools = dbtool_lib
+MysqlNode = getattr(mysql_lib, "MysqlNode")
+ServerId = getattr(proxy_lib, "ServerId")
+Hostgroup = getattr(proxy_lib, "Hostgroup")
+# Generic import section [END]
+
+
+# from common import utils_mb
+# import common.dbtools as dbtools
+# from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node
+# from proxysqlpkg.proxysql_obj import ProxySQLNode, ProxyMysqlDataNode, Hostgroup
+# from proxysqlpkg.proxysql_obj import ServerId
+# from proxysqlpkg.proxysql_obj import ServerId, Hostgroup
 
 import logging
-import json
+
+
 
 class PXCNode(MysqlNode):
     """
@@ -280,7 +321,7 @@ class PXCCluster:
         Returns
             Void
         """
-        from proxysqlpkg.proxysql_obj import ProxySQLNode
+        # from proxysqlpkg.proxysql_obj import ProxySQLNode
         if dbtools.validate_uri(uri):
             self.proxysql_node = ProxySQLNode(uri)
             self.proxysql_node.handler = self._handler
@@ -355,7 +396,7 @@ class PXCCluster:
             #     logging.debug("Exit")
         else:
             # No node is present we can add without problem
-            logging.info("No nodes ot Host Group present in ProxySQL server")
+            logging.info("No nodes or Host Group present in ProxySQL server")
             logging.info("Add cluster starts")
             for node in _proxysql_backend.values():
                 self.proxysql_node.insert_backend(node)
