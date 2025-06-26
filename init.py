@@ -55,11 +55,11 @@ class Magicbox:
     #     }
 
 
-import debugpy
-debugpy.listen(("localhost", 5678))
-print("Waiting for debugger attach...")
-debugpy.wait_for_client()
-print("Debugger attached.")
+# import debugpy
+# debugpy.listen(("localhost", 5678))
+# print("Waiting for debugger attach...")
+# debugpy.wait_for_client()
+# print("Debugger attached.")
 
 
 
@@ -153,11 +153,11 @@ print("Debugger attached.")
 
 from magicbox.magicbox import MagicC
 
-@plugin_function("magicbox.checkAll")
+@plugin_function("Magicbox.checkAll")
 def check_all():
     MagicC.check_all()
     
-@plugin_function("magicbox.checkMonitor")
+@plugin_function("Magicbox.checkMonitor")
 def check_monitor():
     MagicC.test_monitor()
     
