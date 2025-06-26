@@ -6,31 +6,11 @@ from io import StringIO
 from logging import exception
 from typing import Dict
 
-
-# Generic import section [START]
-# to allow us to import libs no matter where if in mysql shell or outside
-# import importlib
-# def import_flexible(*module_paths):
-#     last_error = None
-#     for path in module_paths:
-#         try:
-#             module = importlib.import_module(path)
-#             return module
-#         except ImportError as e:
-#             last_error = e
-#     raise ImportError(
-#         f"Could not import module from any of: {', '.join(module_paths)}"
-#     ) from last_error
-
-
-# dbtools = import_flexible("magicbox.common.dbtool", "common.dbtools")
-# utils_mb = import_flexible("magicbox.common.utils_mb", "common.utils_mb")
-# mysql_lib = import_flexible("magicbox.mysqlpkg.mysql_obj", "mysqlpkg.mysql_obj")
-# MysqlNode = getattr(mysql_lib, "MysqlNode")
-# Generic import section [END]
+# We have different entry points to load modules.
+# When inside MySQL Shell we need full path
 try:
     from common import utils_mb, dbtools
-    from magicbox.mysqlpkg.mysql_obj import MysqlNode
+    from mysqlpkg.mysql_obj import MysqlNode
 except ImportError:
     from magicbox.common import utils_mb, dbtools
     from magicbox.mysqlpkg.mysql_obj import MysqlNode

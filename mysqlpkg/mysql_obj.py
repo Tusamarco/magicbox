@@ -1,6 +1,5 @@
 # object module defining all mysql related class
 #import mysqlsh
-import time
 import sys
 import importlib
 
@@ -8,29 +7,12 @@ from typing import Dict
 #from mysqlsh import mysql
 #shell = mysqlsh.globals.shell
 
-
-# Generic import section [START]
-# to allow us to import libs no matter where if in mysql shell or outside
-import importlib
-# def import_flexible(*module_paths):
-#     last_error = None
-#     for path in module_paths:
-#         try:
-#             module = importlib.import_module(path)
-#             return module
-#         except ImportError as e:
-#             last_error = e
-#     raise ImportError(
-#         f"Could not import module from any of: {', '.join(module_paths)}"
-#     ) from last_error
-# dbtools = import_flexible("magicbox.common.dbtool", "common.dbtools")
-# utils_mb = import_flexible("magicbox.common.utils_mb", "common.utils_mb")
-# Generic import section [END]
-
+# We have different entry points to load modules.
+# When inside MySQL Shell we need full path
 try:
-    import magicbox.common.dbtools as dbtools
-except ImportError:
     import common.dbtools as dbtools
+except ImportError:
+    import magicbox.common.dbtools as dbtools
     pass
 
 importlib.reload(dbtools)

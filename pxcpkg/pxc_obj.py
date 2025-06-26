@@ -5,43 +5,8 @@ from operator import truediv
 from typing import Dict
 
 
-# Generic import section [START]
-# to allow us to import libs no matter where if in mysql shell or outside
-# import importlib
-#
-# def import_flexible(*module_paths):
-#     last_error = None
-#     for path in module_paths:
-#         try:
-#             module = importlib.import_module(path)
-#             return module
-#         except ImportError as e:
-#             last_error = e
-#     raise ImportError(
-#         f"Could not import module from any of: {', '.join(module_paths)}"
-#     ) from last_error
-#
-#
-# mon_lib = import_flexible("magicbox.monitorpkg.monitor", "monitorpkg.monitor")
-# proxy_lib = import_flexible("magicbox.proxysqlpkg.proxysql_obj", "proxysqlpkg.proxysql_obj")
-# # pxc_lib = import_flexible("magicbox.pxcpkg.pxc_obj", "pxcpkg.pxc_obj")
-# dbtools = import_flexible("magicbox.common.dbtool", "common.dbtools")
-# utils_mb = import_flexible("magicbox.common.utils_mb", "common.utils_mb")
-# mysql_lib = import_flexible("magicbox.mysqlpkg.mysql_obj", "mysqlpkg.mysql_obj")
-#
-#
-# Monitor = getattr(mon_lib, "Monitor")
-# ProxySQLCluster = getattr(proxy_lib, "ProxySQLCluster")
-# ProxySQLNode = getattr(proxy_lib, "ProxySQLNode")
-# ProxyMysqlDataNode = getattr(proxy_lib, "ProxyMysqlDataNode")
-# # PXCCluster = getattr(pxc_lib, "PXCCluster")
-# # utils_mb = utils_lib
-# # dbtools = dbtool_lib
-# MysqlNode = getattr(mysql_lib, "MysqlNode")
-# ServerId = getattr(proxy_lib, "ServerId")
-# Hostgroup = getattr(proxy_lib, "Hostgroup")
-# Generic import section [END]
-
+# We have different entry points to load modules.
+# When inside MySQL Shell we need full path
 try:
     from common import utils_mb, dbtools
     from mysqlpkg.mysql_obj import MysqlNode # mysqlpkg.mysql_obj import Mysql_Node

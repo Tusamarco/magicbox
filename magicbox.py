@@ -1,30 +1,7 @@
 import logging
 
-# Generic import section [START]
-# to allow us to import libs no matter where if in mysql shell or outside
-# import importlib
-# def import_flexible(*module_paths):
-#     last_error = None
-#     for path in module_paths:
-#         try:
-#             module = importlib.import_module(path)
-#             return module
-#         except ImportError as e:
-#             last_error = e
-#     raise ImportError(
-#         f"Could not import module from any of: {', '.join(module_paths)}"
-#     ) from last_error
-#
-#
-# mon_lib = import_flexible("magicbox.monitorpkg.monitor", "monitorpkg.monitor")
-# proxy_lib = import_flexible("magicbox.proxysqlpkg.proxysql_obj", "proxysqlpkg.proxysql_obj")
-# pxc_lib = import_flexible("magicbox.pxcpkg.pxc_obj", "pxcpkg.pxc_obj")
-# Monitor = getattr(mon_lib, "Monitor")
-# ProxyMysqlDataNode = getattr(proxy_lib, "ProxyMysqlDataNode")
-# PXCCluster = getattr(pxc_lib, "PXCCluster")
-
-# Generic import section [END]
-
+# We have different entry points to load modules.
+# When inside MySQL Shell we need full path
 try:
     from monitorpkg.monitor import Monitor
     from proxysqlpkg.proxysql_obj import ProxySQLCluster, ProxySQLNode, ProxyMysqlDataNode
