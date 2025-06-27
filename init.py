@@ -153,12 +153,12 @@ class Magicbox:
 
 from magicbox.magicbox import MagicC
 
-@plugin_function("Magicbox.checkAll")
+@plugin_function("Magicbox.check_all")
 def check_all():
     MagicC.check_all()
     
-@plugin_function("Magicbox.checkMonitor")
-def check_monitor():
+@plugin_function("Magicbox.check_monitor")
+def test_monitor():
     MagicC.test_monitor()
     
     

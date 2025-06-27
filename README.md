@@ -1,3 +1,15 @@
+<!-- TOC -->
+* [What is this?](#what-is-this)
+* [What is already implemented:](#what-is-already-implemented)
+  * [Modules required](#modules-required)
+  * [Logger](#logger)
+  * [when using with MySQL shell](#when-using-with-mysql-shell)
+    * [You can call them also from command line:](#you-can-call-them-also-from-command-line)
+  * [When running from Python](#when-running-from-python-)
+    * [Commands](#commands)
+* [Digging a bit inside](#digging-a-bit-inside-)
+<!-- TOC -->
+
 # What is this?
 MagicBox is a collection of Python scripts that can be run inside MySQL MySQL-Shell, as plugins.
 The code is designed to be eventually run also outside the MySQL sell as stand-alone.
@@ -61,7 +73,7 @@ FUNCTIONS
       check_all()
 
 
-      check_monitor()
+      test_monitor()
 
 
       help([member])
@@ -69,18 +81,29 @@ FUNCTIONS
 
 ```
 
-You can call them also from command line:
+### You can call them also from command line:
 ```shell
-./mysqlsh --py  --execute 'Magicbox.check_monitor()'
+./mysqlsh --py  --execute 'Magicbox.test_monitor()'
 ```
 
+## When running from Python 
 1) Open Python console
 2) Import the magicbox top class (that simulates the plugin call in shell)
     ``` python 
    from magicbox import MagicC
    ```
+   
 3) use MagicC instead magicbox in the following commands
-## Commands
+### Commands
+```python
+MagicC.test_monitor()
+```
+# Digging a bit inside
+
+## What is the path to create a PXC cluster inside ProxySQL
+
+## What objects we have:
+![magicbox.png](magicbox.png)
 
 create initial processor:
 ```python
