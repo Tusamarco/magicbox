@@ -6,7 +6,8 @@ try:
     from monitorpkg.monitor import Monitor
     from proxysqlpkg.proxysql_obj import ProxySQLCluster, ProxySQLNode, ProxyMysqlDataNode
     from pxcpkg.pxc_obj import PXCCluster
-except ImportError:
+except ImportError as e:
+    # print(f"An error occurred: {e}")
     from magicbox.monitorpkg.monitor import Monitor
     from magicbox.proxysqlpkg.proxysql_obj import ProxySQLCluster, ProxySQLNode, ProxyMysqlDataNode
     from magicbox.pxcpkg.pxc_obj import PXCCluster
