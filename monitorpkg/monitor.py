@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from logging import exception
@@ -10,10 +11,15 @@ try:
     from proxysqlpkg.proxysql_obj import ProxySQLCluster, ProxySQLNode, ProxyMysqlDataNode
     # from proxysqlpkg.proxysql_obj import ProxySQLNode
 except ImportError:
-    from magicbox.proxysqlpkg.proxysql_obj import ProxySQLNode
+    from magicbox.proxysqlpkg.proxysql_obj import ProxySQLNode, ProxySQLCluster, ProxyMysqlDataNode
     pass
 
-from pynput import keyboard
+#os.environ['DISPLAY'] = ':0'
+try:
+    from pynput import keyboard
+except ImportError:
+    logging.warning('This function works only when an X environment is set')
+    pass
 
 class Monitor:
     """
@@ -200,7 +206,11 @@ clear_entry = False
 monitor_process_status = Monitor.MODE_RUN
 monitor_mode = Monitor.MODE_PROXYSQL_PXC_SUMMARY
 
+#try:
 listener = keyboard.Listener(on_press=on_press)
 listener.start()
+#except NameError:
+#    logging.error('This function works only when an X environment is set')
+#    pass
 
 
